@@ -5,8 +5,14 @@ require 'yaml'
 #####
 ##
 ## Create a todo file like this:
-## TODO: make output
-##
+#
+#     ---
+#     :source: ljsmisc1.git
+#     :zip_dest: dest_dir_for_zips
+#     :compressed_source: dest_dir_for_zips/ljsmisc1.zip
+#     :glacier_description: "{ json_blob: some_stuff }"
+#     :glacier_vault: bulwark
+#
 #####
 
 def missing_args
