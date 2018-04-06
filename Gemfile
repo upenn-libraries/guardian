@@ -1,6 +1,5 @@
 source 'https://rubygems.org'
-source 'http://tuka.library.upenn.int:9292/'
 
-gem 'stronghold'
-gem 'todo_runner'
+gem 'stronghold', git: 'https://github.com/upenn-libraries/stronghold.git'
+gem 'todo_runner', git: 'https://github.com/upenn-libraries/todo_runner.git'
 gem 'smarter_csv'
