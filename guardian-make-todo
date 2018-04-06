@@ -1,2 +1,25 @@
 #!/usr/bin/env ruby
 
+require 'yaml'
+
+#####
+##
+## Create a todo file like this:
+## TODO: make output
+##
+#####
+
+def missing_args
+  # validate command-line args
+end
+
+def create_todo_file(args = {})
+  # create individual files
+end
+
+# TODO: validate arguments
+
+SmarterCSV.parse(file).each do |row|
+  args = get_args(row)
+  create_todo_file(args)
+end
