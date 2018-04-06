@@ -25,6 +25,7 @@ GEM
     multi_json (1.13.1)
     nokogiri (1.8.2)
       mini_portile2 (~> 2.3.0)
+    smarter_csv (1.2.3)
     stronghold (0.1.0)
       fog-aws (~> 2.0)
     todo_runner (0.3.0)
@@ -33,6 +34,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  smarter_csv
   stronghold
   todo_runner
 

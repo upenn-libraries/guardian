@@ -3,3 +3,4 @@ source 'http://tuka.library.upenn.int:9292/'
 
 gem 'stronghold'
 gem 'todo_runner'
+gem 'smarter_csv'
