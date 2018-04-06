@@ -15,6 +15,7 @@ GEM
   remote: https://rubygems.org/
   specs:
     builder (3.2.3)
+    coderay (1.1.2)
     excon (0.62.0)
     fog-aws (2.0.1)
       fog-core (~> 1.38)
@@ -33,16 +34,21 @@ GEM
       nokogiri (>= 1.5.11, < 2.0.0)
     formatador (0.2.5)
     ipaddress (0.8.3)
+    method_source (0.9.0)
     mini_portile2 (2.3.0)
     multi_json (1.13.1)
     nokogiri (1.8.2)
       mini_portile2 (~> 2.3.0)
+    pry (0.11.3)
+      coderay (~> 1.1.0)
+      method_source (~> 0.9.0)
     smarter_csv (1.2.3)
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
+  pry
   smarter_csv
   stronghold!
   todo_runner!
