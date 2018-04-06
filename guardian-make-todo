@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'yaml'
+require 'smarter_csv'
 
 #####
 ##
@@ -26,7 +27,8 @@ end
 
 validate_args!
 
-SmarterCSV.parse(file).each do |row|
-  args = get_args(row)
-  create_todo_file(args)
+file = ARGV[0]
+
+SmarterCSV.process(file).each do |row|
+  create_todo_file(row)
 end
