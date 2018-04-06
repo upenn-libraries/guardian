@@ -15,15 +15,16 @@ require 'yaml'
 #
 #####
 
-def missing_args
-  # validate command-line args
+def validate_args!
+  raise ArgumentError.new('Please supply a CSV file') if ARGV[0].nil?
+  raise ArgumentError.new("#{ARGV[0]} not found") if File.exist?(ARGV[0]) == false
 end
 
 def create_todo_file(args = {})
   # create individual files
 end
 
-# TODO: validate arguments
+validate_args!
 
 SmarterCSV.parse(file).each do |row|
   args = get_args(row)
