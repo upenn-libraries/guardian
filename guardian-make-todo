@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 
+require 'smarter_csv'
 require 'yaml'
 require 'smarter_csv'
 
@@ -18,17 +19,27 @@ require 'smarter_csv'
 
 def validate_args!
   raise ArgumentError.new('Please supply a CSV file') if ARGV[0].nil?
+  raise ArgumentError.new('Please supply a destination directory') if ARGV[1].nil?
   raise ArgumentError.new("#{ARGV[0]} not found") if File.exist?(ARGV[0]) == false
+  raise ArgumentError.new("#{ARGV[1]} not found") if File.directory?(ARGV[1]) == false
 end
 
-def create_todo_file(args = {})
-  # create individual files
+HEADERS = %i{ zip_dest compressed_source glacier_description glacier_vault }
+
+# Input columns are:
+# todo_base	source	zip_dest	compressed_source	glacier_description	glacier_vault
+def create_todo_file(args = {}, dest_dir)
+  todo_base = args[:todo_base]
+  todo_path = File.join dest_dir, "#{todo_base}.todo"
+  data = HEADERS.inject({}) { |h,header| h.merge(header => args[header]) }
+  File.open(todo_path, 'w+') { |f| f.puts YAML::dump data }
 end
 
 validate_args!
 
 file = ARGV[0]
+dest_dir = ARGV[1]
 
 SmarterCSV.process(file).each do |row|
-  create_todo_file(row)
+  create_todo_file(row, dest_dir)
 end
