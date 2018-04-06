@@ -2,6 +2,7 @@
 
 require 'smarter_csv'
 require 'yaml'
+require 'smarter_csv'
 
 #####
 ##
@@ -36,10 +37,9 @@ end
 
 validate_args!
 
-csv_file = ARGV[0]
+file = ARGV[0]
 dest_dir = ARGV[1]
 
-SmarterCSV.parse(csv_file).each do |row|
-  args = get_args(row)
-  create_todo_file(args)
+SmarterCSV.process(file).each do |row|
+  create_todo_file(row, dest_dir)
 end
