@@ -1,0 +1,45 @@
+#!/usr/bin/env ruby
+
+require 'todo_runner'
+require 'stronghold'
+require 'yaml'
+
+TodoRunner.define do
+
+  LOG_FILE = 'completion.txt'
+
+  def zip_package
+    return true if success
+  end
+
+  def glacier_transfer
+    return {key: value}, true if success
+  end
+
+  def log_complete
+    # write a single line to completion file
+  end
+
+  def update_fort_db
+    # load contents of completion file into fort stronghold db
+    File.write(LOG_FILE)
+  end
+
+  start :zip
+
+  task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
+    data = YAML.load todo_file
+    zip_package
+  end
+
+  task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
+    data = YAML.load todo_file
+    k_v = glacier_transfer
+    log_complete(k_v)
+  end
+
+  after :all do
+    update_fort_db
+  end
+
+end
