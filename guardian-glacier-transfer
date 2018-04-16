@@ -12,11 +12,29 @@ TodoRunner.define do
     return true if success
   end
 
-  def glacier_transfer
-    return {key: value}, true if success
+  def validate_transfer_data todo_data
+    %i{ compressed_destination glacier_description glacier_vault }.each do |key|
+      raise ArgumentError, "Require transfer value not present #{key.inspect}: " \
+        "#{todo_data}" unless todo_data[key]
+    end
+
+    unless File.exist? todo_data[:compressed_destination]
+      raise ArgumentError, "Cannot find :compressed_destination: " \
+        "#{todo_data[:compressed_destination]}"
+    end
   end
 
-  def log_complete
+  def glacier_transfer todo_data
+    validate_transfer_data todo_data
+    file_path           = todo_data[:compressed_destination]
+    archive_description = todo_data[:glacier_description]
+    vault_id            = todo_data[:glacier_vault]
+
+    client  = Stronghold::Client.new
+    client.create_backup vault_id, file_path, archive_description
+  end
+
+  def log_complete k_v
     # write a single line to completion file
   end
 
