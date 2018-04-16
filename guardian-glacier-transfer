@@ -4,11 +4,29 @@ require 'todo_runner'
 require 'stronghold'
 require 'yaml'
 
+require 'pry'
+
 TodoRunner.define do
 
   LOG_FILE = 'completion.txt'
 
-  def zip_package
+  def fetch_source(source, workspace, application, method)
+
+    case application
+      when 'bulwark'
+        
+      when 'openn'
+        #TODO: Fill this out
+      else
+        raise "Invalud application #{application} specified."
+    end
+
+
+  end
+
+  def zip_package(manifest_data)
+    fetch_source(manifest_data[:source], manifest_data[:workspace], manifest_data[:application], manifest_data[:method])
+    binding.pry
     return true if success
   end
 
@@ -29,7 +47,7 @@ TodoRunner.define do
 
   task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
     data = YAML.load todo_file
-    zip_package
+    zip_package(data)
   end
 
   task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
@@ -43,3 +61,5 @@ TodoRunner.define do
   end
 
 end
+
+TodoRunner.run(*ARGV)

@@ -24,7 +24,7 @@ def validate_args!
   raise ArgumentError.new("#{ARGV[1]} not found") if File.directory?(ARGV[1]) == false
 end
 
-HEADERS = %i{ zip_dest compressed_source glacier_description glacier_vault }
+HEADERS = %i{ todo_base	source	workspace	compressed_destination	glacier_description	glacier_vault	application	method }
 
 # Input columns are:
 # todo_base	source	zip_dest	compressed_source	glacier_description	glacier_vault
