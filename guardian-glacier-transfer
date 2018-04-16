@@ -24,6 +24,14 @@ TodoRunner.define do
     end
   end
 
+  def load_data todo_file
+    begin
+      YAML::load todo_file
+    rescue
+      raise ArgumentError, "Unablle to read todo_file as YAML: #{todo_file.path}"
+    end
+  end
+
   def glacier_transfer todo_data
     validate_transfer_data todo_data
     file_path           = todo_data[:compressed_destination]
@@ -51,9 +59,15 @@ TodoRunner.define do
   end
 
   task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
-    data = YAML.load todo_file
-    k_v = glacier_transfer
-    log_complete(k_v)
+    begin
+      data = load_data(todo_file)
+      k_v  = glacier_transfer(data)
+      log_complete(k_v)
+      true
+    rescue ArgumentError => ex
+      puts "ERROR #{ex.message}"
+      false
+    end
   end
 
   after :all do
