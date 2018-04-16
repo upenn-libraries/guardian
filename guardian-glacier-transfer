@@ -28,7 +28,7 @@ TodoRunner.define do
     begin
       YAML::load todo_file
     rescue
-      raise ArgumentError, "Unablle to read todo_file as YAML: #{todo_file.path}"
+      raise ArgumentError, "Unable to read todo_file as YAML: #{todo_file.path}"
     end
   end
 
@@ -39,7 +39,7 @@ TodoRunner.define do
     vault_id            = todo_data[:glacier_vault]
 
     client  = Stronghold::Client.new
-    return client.create_backup vault_id, file_path, archive_description
+    client.create_backup vault_id, file_path, archive_description
   end
 
   def log_complete k_v
