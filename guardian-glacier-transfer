@@ -31,7 +31,7 @@ TodoRunner.define do
     vault_id            = todo_data[:glacier_vault]
 
     client  = Stronghold::Client.new
-    client.create_backup vault_id, file_path, archive_description
+    return client.create_backup vault_id, file_path, archive_description
   end
 
   def log_complete k_v
