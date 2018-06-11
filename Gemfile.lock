@@ -1,18 +1,6 @@
-GIT
-  remote: https://github.com/upenn-libraries/stronghold.git
-  revision: 84e758f06a3db4d07df20c041e9af912e5c9b7b5
-  specs:
-    stronghold (0.1.0)
-      fog-aws (~> 2.0)
-
-GIT
-  remote: https://github.com/upenn-libraries/todo_runner.git
-  revision: f305d4a8d604bb27007dbf70018848786d47b0bc
-  specs:
-    todo_runner (0.3.0)
-
 GEM
   remote: https://rubygems.org/
+  remote: http://tuka.library.upenn.int:9292/
   specs:
     builder (3.2.3)
     coderay (1.1.2)
@@ -42,16 +30,21 @@ GEM
     pry (0.11.3)
       coderay (~> 1.1.0)
       method_source (~> 0.9.0)
+    rubyzip (1.2.1)
     smarter_csv (1.2.3)
+    stronghold (0.1.1)
+      fog-aws (~> 2.0)
+    todo_runner (0.3.0)
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
   pry
+  rubyzip
   smarter_csv
-  stronghold!
-  todo_runner!
+  stronghold
+  todo_runner
 
 BUNDLED WITH
-   1.16.0
+   1.16.1
