@@ -62,7 +62,6 @@ TodoRunner.define do
     begin
       data = load_data(todo_file)
       k_v  = glacier_transfer(data)
-      puts k_v
       log_complete(k_v)
       true
     rescue ArgumentError => ex
