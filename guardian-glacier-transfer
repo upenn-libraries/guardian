@@ -1,15 +1,87 @@
 #!/usr/bin/env ruby
 
-require 'todo_runner'
 require 'stronghold'
+require 'todo_runner'
 require 'yaml'
+require 'zip'
+
+require 'pry'
+
+
+# Copied from https://github.com/rubyzip/rubyzip
+
+class ZipFileGenerator
+  def initialize(input_dir, output_file)
+    @input_dir = input_dir
+    @output_file = output_file
+  end
+
+  def write
+    entries = Dir.entries(@input_dir) - %w(. ..)
+
+    ::Zip::File.open(@output_file, ::Zip::File::CREATE) do |zipfile|
+      write_entries entries, '', zipfile
+    end
+  end
+
+  private
+
+  def write_entries(entries, path, zipfile)
+    entries.each do |e|
+      zipfile_path = path == '' ? e : File.join(path, e)
+      disk_file_path = File.join(@input_dir, zipfile_path)
+      puts "Deflating #{disk_file_path}"
+
+      if File.directory? disk_file_path
+        recursively_deflate_directory(disk_file_path, zipfile, zipfile_path)
+      else
+        put_into_archive(disk_file_path, zipfile, zipfile_path)
+      end
+    end
+  end
+
+  def recursively_deflate_directory(disk_file_path, zipfile, zipfile_path)
+    zipfile.mkdir zipfile_path
+    subdir = Dir.entries(disk_file_path) - %w(. ..)
+    write_entries subdir, zipfile_path, zipfile
+  end
+
+  def put_into_archive(disk_file_path, zipfile, zipfile_path)
+    zipfile.get_output_stream(zipfile_path) do |f|
+      f.write(File.open(disk_file_path, 'rb').read)
+    end
+  end
+end
 
 TodoRunner.define do
 
   LOG_FILE = 'completion.txt'
 
-  def zip_package
-    return true if success
+  def fetch_source(source, workspace, application, method)
+
+    case "#{application}_#{method}"
+      when 'bulwark_gitannex'
+        `git clone #{source} #{workspace}/#{File.basename(source)}`
+        Dir.chdir("#{workspace}/#{File.basename(source)}")
+        `./.repoadmin/bin/init.sh`
+        `git annex get .`
+        `git annex unlock .`
+        return "#{workspace}/#{File.basename(source)}"
+      when 'openn_rsync'
+        #TODO: Fill this out
+      else
+        raise "Invalid application #{application} specified."
+    end
+
+
+  end
+
+  def zip_package(manifest_data)
+    directory_to_zip = fetch_source(manifest_data[:source], manifest_data[:workspace], manifest_data[:application], manifest_data[:method])
+    output_location = "#{directory_to_zip}.zip"
+    zip_package = ZipFileGenerator.new(directory_to_zip, output_location)
+    zip_package.write
+    return true
   end
 
   def validate_transfer_data todo_data
@@ -55,23 +127,24 @@ TodoRunner.define do
 
   task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
     data = YAML.load todo_file
-    zip_package
+    zip_package(data)
   end
 
-  task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
-    begin
-      data = load_data(todo_file)
-      k_v  = glacier_transfer(data)
-      log_complete(k_v)
-      true
-    rescue ArgumentError => ex
-      puts "ERROR #{ex.message}"
-      false
-    end
-  end
+  # task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
+  #   begin
+  #     data = load_data(todo_file)
+  #     k_v  = glacier_transfer(data)
+  #     log_complete(k_v)
+  #     true
+  #   rescue ArgumentError => ex
+  #     puts "ERROR #{ex.message}"
+  #     false
+  #   end
+  # end
 
   after :all do
     update_fort_db
   end
-
 end
+
+TodoRunner.run(*ARGV)
