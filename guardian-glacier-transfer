@@ -84,11 +84,37 @@ TodoRunner.define do
     return true
   end
 
-  def glacier_transfer
-    return {key: value}, true if success
+  def validate_transfer_data todo_data
+    %i{ compressed_destination glacier_description glacier_vault }.each do |key|
+      raise ArgumentError, "Require transfer value not present #{key.inspect}: " \
+        "#{todo_data}" unless todo_data[key]
+    end
+
+    unless File.exist? todo_data[:compressed_destination]
+      raise ArgumentError, "Cannot find :compressed_destination: " \
+        "#{todo_data[:compressed_destination]}"
+    end
   end
 
-  def log_complete
+  def load_data todo_file
+    begin
+      YAML::load todo_file
+    rescue
+      raise ArgumentError, "Unable to read todo_file as YAML: #{todo_file.path}"
+    end
+  end
+
+  def glacier_transfer todo_data
+    validate_transfer_data todo_data
+    file_path           = todo_data[:compressed_destination]
+    archive_description = todo_data[:glacier_description]
+    vault_id            = todo_data[:glacier_vault]
+
+    client  = Stronghold::Client.new
+    client.create_backup vault_id, file_path, archive_description
+  end
+
+  def log_complete k_v
     # write a single line to completion file
   end
 
@@ -105,15 +131,20 @@ TodoRunner.define do
   end
 
   # task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
-    #data = YAML.load todo_file
-    #k_v = glacier_transfer
-    #log_complete(k_v)
-  # end
-  #
-  # after :all do
-  #   update_fort_db
+  #   begin
+  #     data = load_data(todo_file)
+  #     k_v  = glacier_transfer(data)
+  #     log_complete(k_v)
+  #     true
+  #   rescue ArgumentError => ex
+  #     puts "ERROR #{ex.message}"
+  #     false
+  #   end
   # end
 
+  after :all do
+    update_fort_db
+  end
 end
 
 TodoRunner.run(*ARGV)
