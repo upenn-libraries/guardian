@@ -2,3 +2,5 @@
 .idea/
 *.csv
 todos/
+scripts/list
+scripts/batch.sh
