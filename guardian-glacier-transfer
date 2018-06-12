@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 
+require 'active_record'
+require 'find'
+require 'logger'
 require 'stronghold'
 require 'todo_runner'
 require 'yaml'
 require 'zip'
-
-require 'pry'
-
 
 # Copied from https://github.com/rubyzip/rubyzip
 
@@ -53,40 +53,51 @@ class ZipFileGenerator
   end
 end
 
+class GlacierArchive < ActiveRecord::Base
+  has_many :table_relationship
+end
+
+ActiveRecord::Base.establish_connection(
+    :adapter => 'mysql2',
+    :host => ENV['STRONGHOLD_HOST'],
+    :username=> ENV['STRONGHOLD_USERNAME'],
+    :password=> ENV['STRONGHOLD_PASSWORD'],
+    :database => ENV['STRONGHOLD_DB']
+)
+
 TodoRunner.define do
 
-  LOG_FILE = 'completion.txt'
+  LOG_FILE = '/Users/kate/Documents/Projects/guardian/logs/completion.txt'
+
+  LOG_FILE_SEPARATOR = ' | '
 
   def fetch_source(source, workspace, application, method)
-
     case "#{application}_#{method}"
       when 'bulwark_gitannex'
         `git clone #{source} #{workspace}/#{File.basename(source)}`
-        Dir.chdir("#{workspace}/#{File.basename(source)}")
-        `./.repoadmin/bin/init.sh`
-        `git annex get .`
-        `git annex unlock .`
+        Dir.chdir("#{workspace}/#{File.basename(source)}") do
+          `./.repoadmin/bin/init.sh`
+          `git annex get .`
+          `git annex unlock .`
+        end
         return "#{workspace}/#{File.basename(source)}"
       when 'openn_rsync'
         #TODO: Fill this out
       else
         raise "Invalid application #{application} specified."
     end
-
-
   end
 
   def zip_package(manifest_data)
     directory_to_zip = fetch_source(manifest_data[:source], manifest_data[:workspace], manifest_data[:application], manifest_data[:method])
-    output_location = "#{directory_to_zip}.zip"
-    zip_package = ZipFileGenerator.new(directory_to_zip, output_location)
+    zip_package = ZipFileGenerator.new(directory_to_zip, manifest_data[:compressed_destination])
     zip_package.write
-    return true
+    true
   end
 
-  def validate_transfer_data todo_data
+  def validate_transfer_data(todo_data)
     %i{ compressed_destination glacier_description glacier_vault }.each do |key|
-      raise ArgumentError, "Require transfer value not present #{key.inspect}: " \
+      raise ArgumentError, "Required transfer value not present #{key.inspect}: " \
         "#{todo_data}" unless todo_data[key]
     end
 
@@ -96,7 +107,7 @@ TodoRunner.define do
     end
   end
 
-  def load_data todo_file
+  def load_data(todo_file)
     begin
       YAML::load todo_file
     rescue
@@ -104,23 +115,42 @@ TodoRunner.define do
     end
   end
 
-  def glacier_transfer todo_data
+  def glacier_transfer(todo_data)
     validate_transfer_data todo_data
     file_path           = todo_data[:compressed_destination]
     archive_description = todo_data[:glacier_description]
     vault_id            = todo_data[:glacier_vault]
-
-    client  = Stronghold::Client.new
+    client              = Stronghold::Client.new
     client.create_backup vault_id, file_path, archive_description
   end
 
-  def log_complete k_v
-    # write a single line to completion file
+  def log_complete(values_hash)
+    formatted_string = ''
+    values_hash.each do |key, value|
+      formatted_string << "#{key}#{LOG_FILE_SEPARATOR}#{value}\n"
+    end
+    File.open(LOG_FILE, 'a') { |file| file.write(formatted_string) }
+    true
+  end
+
+  def remove_zip_artifacts(todo_data)
+    Dir.glob("#{todo_data[:workspace]}/*") do |path|
+      git_annex_drop(path) if todo_data[:method] == 'gitannex' && File.extname(path) == '.git'
+      FileUtils.rm_rf(path, :secure => true)
+    end
+  end
+
+  def git_annex_drop(path)
+    Dir.chdir(path) do
+      `git annex drop --all --force`
+    end
   end
 
   def update_fort_db
-    # load contents of completion file into fort stronghold db
-    File.write(LOG_FILE)
+    File.open(File.absolute_path(LOG_FILE)).each_line do |line|
+      description, archive_id = line.split(LOG_FILE_SEPARATOR)
+      GlacierArchive.create(:description => description, :archive_id => archive_id)
+    end
   end
 
   start :zip
@@ -128,23 +158,34 @@ TodoRunner.define do
   task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
     data = YAML.load todo_file
     zip_package(data)
+    true
   end
 
-  # task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
-  #   begin
-  #     data = load_data(todo_file)
-  #     k_v  = glacier_transfer(data)
-  #     log_complete(k_v)
-  #     true
-  #   rescue ArgumentError => ex
-  #     puts "ERROR #{ex.message}"
-  #     false
-  #   end
-  # end
+  task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
+    begin
+      data = load_data(todo_file)
+      transfer_values  = glacier_transfer(data)
+      log_complete(transfer_values)
+      remove_zip_artifacts(data)
+      true
+    rescue ArgumentError => ex
+      puts "ERROR #{ex.message}"
+      false
+    end
+    true
+  end
 
   after :all do
     update_fort_db
   end
+
 end
 
+logger = Logger.new('| tee logger.log')
+logger.level = Logger::INFO
+
+logger.info('Todo Runner initialized, starting run...')
+
 TodoRunner.run(*ARGV)
+
+logger.info('Run complete.')
