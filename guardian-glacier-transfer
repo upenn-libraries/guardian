@@ -8,8 +8,6 @@ require 'todo_runner'
 require 'yaml'
 require 'zip'
 
-require 'pry'
-
 # Copied from https://github.com/rubyzip/rubyzip
 
 class ZipFileGenerator
