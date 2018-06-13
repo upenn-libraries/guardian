@@ -8,6 +8,8 @@ require 'todo_runner'
 require 'yaml'
 require 'zip'
 
+require 'pry'
+
 # Copied from https://github.com/rubyzip/rubyzip
 
 class ZipFileGenerator
@@ -65,9 +67,12 @@ ActiveRecord::Base.establish_connection(
     :database => ENV['STRONGHOLD_DB']
 )
 
+logger = Logger.new('| tee logger.log')
+logger.level = Logger::INFO
+
 TodoRunner.define do
 
-  LOG_FILE = '/Users/kate/Documents/Projects/guardian/logs/completion.txt'
+  LOG_FILE = ENV['LOG_FILE']
 
   LOG_FILE_SEPARATOR = ' | '
 
@@ -157,16 +162,22 @@ TodoRunner.define do
 
   task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
     data = YAML.load todo_file
+    logger.info("Fetching and assembling archive for #{data[:todo_base]}...")
     zip_package(data)
+    logger.info('Archive assembled.')
     true
   end
 
   task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
     begin
       data = load_data(todo_file)
+      logger.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
       transfer_values  = glacier_transfer(data)
+      logger.info("Transfer complete.  Logging data to #{LOG_FILE}...")
       log_complete(transfer_values)
+      logger.info('Logging complete.  Removing zip artifacts...')
       remove_zip_artifacts(data)
+      logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
     rescue ArgumentError => ex
       puts "ERROR #{ex.message}"
@@ -176,13 +187,12 @@ TodoRunner.define do
   end
 
   after :all do
+    logger.info('Updating database with transfer information...')
     update_fort_db
+    logger.info('Database updated.')
   end
 
 end
-
-logger = Logger.new('| tee logger.log')
-logger.level = Logger::INFO
 
 logger.info('Todo Runner initialized, starting run...')
 
