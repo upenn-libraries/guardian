@@ -1,6 +1,7 @@
 .ruby-version
 .idea/
 *.csv
+logger.log
 todos/
 completion.txt
 scripts/list
