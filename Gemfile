@@ -1,6 +1,8 @@
 source 'https://rubygems.org'
 source 'http://tuka.library.upenn.int:9292'
 
+gem 'activerecord'
+gem 'mysql2'
 gem 'rubyzip'
 gem 'smarter_csv'
 gem 'stronghold'

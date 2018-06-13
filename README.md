@@ -1,6 +1,6 @@
 # README for `guardian`
 
-Guardian is an orchestration script for assembling objects into Glacier-ready packages, transferring to Glacier, and returning relevant Glacier information from successful transders.
+Guardian is an orchestration script for assembling objects into Glacier-ready packages, transferring to Glacier, and returning relevant Glacier information from successful transfers.
 
 ## Requirements
 
