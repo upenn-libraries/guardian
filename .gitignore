@@ -11,4 +11,5 @@ scripts/list
 scripts/batch.sh
 
 # Docker stuff
-.env
+db.yml
+stronghold.yml
