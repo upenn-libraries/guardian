@@ -5,6 +5,8 @@ secrets:
     file: 'db.yml'
   stronghold_secrets:
     file: 'stronghold.yml'
+  guardian_secrets:
+    file: 'guardian.yml'
 
 services:
   db:
@@ -20,9 +22,10 @@ services:
     secrets:
       - db_secrets
       - stronghold_secrets
+      - guardian_secrets
     volumes:
       - 'guardian:/usr/src/app'
-      - 'guardian:/todos'
+      - 'guardian_todos:/todos'
 
 volumes:
   db:
