@@ -58,11 +58,11 @@ class GlacierArchive < ActiveRecord::Base
 end
 
 ActiveRecord::Base.establish_connection(
-    :adapter => 'mysql2',
-    :host => ENV['STRONGHOLD_HOST'],
-    :username=> ENV['STRONGHOLD_USERNAME'],
-    :password=> ENV['STRONGHOLD_PASSWORD'],
-    :database => ENV['STRONGHOLD_DB']
+    :adapter => ENV['MYSQL_ADAPTER'],
+    :host => ENV['MYSQL_HOST'],
+    :username=> ENV['MYSQL_USERNAME'],
+    :password=> ENV['MYSQL_PASSWORD'],
+    :database => ENV['MYSQL_DATABASE']
 )
 
 logger = Logger.new('| tee logger.log')

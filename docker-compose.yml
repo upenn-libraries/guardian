@@ -1,0 +1,30 @@
+version: '3.1'
+
+secrets:
+  db_secrets:
+    file: 'db.yml'
+  stronghold_secrets:
+    file: 'stronghold.yml'
+
+services:
+  db:
+    image: 'mysql/mysql-server:5.7'
+    secrets:
+      - db_secrets
+    volumes:
+      - 'db:/var/lib/mysql'
+  guardian:
+    image: 'guardian:latest'
+    depends_on:
+      - 'db'
+    secrets:
+      - db_secrets
+      - stronghold_secrets
+    volumes:
+      - 'guardian:/usr/src/app'
+      - 'guardian:/todos'
+
+volumes:
+  db:
+  guardian:
+  guardian_todos:
