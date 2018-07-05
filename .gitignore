@@ -14,4 +14,3 @@ scripts/batch.sh
 db.yml
 stronghold.yml
 guardian.yml
-.env
