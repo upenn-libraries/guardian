@@ -1,2 +1,1 @@
-LOG_FILE=/abs/path/to/file.txt
-LOCAL_TODOS=/abs/path/to/todos/directory
+LOG_FILE: /abs/path/to/file.txt

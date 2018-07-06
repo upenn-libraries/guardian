@@ -10,7 +10,7 @@ secrets:
 
 services:
   db:
-    image: 'mysql/mysql-server:5.7'
+    image: 'guardian_db:5.7'
     secrets:
       - db_secrets
     volumes:

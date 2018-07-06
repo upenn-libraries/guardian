@@ -18,7 +18,6 @@ class ZipFileGenerator
 
   def write
     entries = Dir.entries(@input_dir) - %w(. ..)
-
     ::Zip::File.open(@output_file, ::Zip::File::CREATE) do |zipfile|
       write_entries entries, '', zipfile
     end
@@ -51,28 +50,28 @@ class ZipFileGenerator
       f.write(File.open(disk_file_path, 'rb').read)
     end
   end
+
 end
 
 class GlacierArchive < ActiveRecord::Base
   has_many :table_relationship
 end
 
-ActiveRecord::Base.establish_connection(
-    :adapter => ENV['MYSQL_ADAPTER'],
-    :host => ENV['MYSQL_HOST'],
-    :username=> ENV['MYSQL_USERNAME'],
-    :password=> ENV['MYSQL_PASSWORD'],
-    :database => ENV['MYSQL_DATABASE']
-)
-
 logger = Logger.new('| tee logger.log')
 logger.level = Logger::INFO
 
 TodoRunner.define do
 
-  LOG_FILE = ENV['LOG_FILE']
-
-  LOG_FILE_SEPARATOR = ' | '
+  def load_secrets(secrets_path)
+    secrets_hash = {}
+    File.exist?("/run/secrets/#{secrets_path}") ? secrets_path = "/run/secrets/#{secrets_path}" : secrets_path
+    File.readlines(secrets_path).each do |line|
+      line.chomp!
+      key, value = line.split('=',2)
+      secrets_hash[key] = value
+    end
+    return secrets_hash
+  end
 
   def fetch_source(source, workspace, application, method)
     case "#{application}_#{method}"
@@ -156,12 +155,26 @@ TodoRunner.define do
     end
   end
 
+  LOG_FILE = ENV['LOG_FILE']
+
+  LOG_FILE_SEPARATOR = ' | '
+
+  DB = load_secrets('db.yml')
+
+  ActiveRecord::Base.establish_connection(
+      :adapter => DB['MYSQL_ADAPTER'],
+      :host => DB['MYSQL_HOST'],
+      :username=> DB['MYSQL_USERNAME'],
+      :password=> DB['MYSQL_PASSWORD'],
+      :database => DB['MYSQL_DATABASE']
+  )
+
   start :zip
 
   task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
     data = YAML.load todo_file
     logger.info("Fetching and assembling archive for #{data[:todo_base]}...")
-    zip_package(data)
+    #zip_package(data)
     logger.info('Archive assembled.')
     true
   end
@@ -170,11 +183,11 @@ TodoRunner.define do
     begin
       data = load_data(todo_file)
       logger.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
-      transfer_values  = glacier_transfer(data)
+      #transfer_values  = glacier_transfer(data)
       logger.info("Transfer complete.  Logging data to #{LOG_FILE}...")
-      log_complete(transfer_values)
+      #log_complete(transfer_values)
       logger.info('Logging complete.  Removing zip artifacts...')
-      remove_zip_artifacts(data)
+      #remove_zip_artifacts(data)
       logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
     rescue ArgumentError => ex

@@ -16,4 +16,4 @@ WORKDIR /usr/src/app/
 
 RUN bundle install
 
-CMD ["ruby", "/usr/src/app/guardian-make-todo /todos"]
+CMD ["bash", "-c", "while [ 1 ]; do sleep 10000; done"]
