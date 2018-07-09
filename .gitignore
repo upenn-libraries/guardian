@@ -11,6 +11,4 @@ scripts/list
 scripts/batch.sh
 
 # Docker stuff
-db.yml
-stronghold.yml
-guardian.yml
+secrets/*.yml

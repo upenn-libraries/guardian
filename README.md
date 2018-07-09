@@ -36,6 +36,7 @@ Where `$PATH_TO_TODO_FILE` is the path on the filesystem to the todo file (YAML 
 ## Dockerized Usage
 
 ```bash
-docker cp $CSV_MANIFEST /usr/src/app/.
-docker exec -it $GUARDIAN_CONTAINER ruby guardian-make-todo $CSV_MANIFEST todos
+docker cp $CSV_MANIFEST $GUARDIAN_CONTAIER:/usr/src/app/.
+docker exec -it $GUARDIAN_CONTAINER ruby guardian-make-todo $CSV_MANIFEST todos/
+docker exec -it $GUARDIAN_CONTAINER ruby guardian-glacier-transfer todos/*.todo
 ```
