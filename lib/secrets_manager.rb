@@ -3,7 +3,7 @@ module SecretsManager
 
   def load_secrets(secrets_path)
     secrets_hash = {}
-    File.exist?("/run/secrets/#{secrets_path}") ? secrets_path = "/run/secrets/#{secrets_path}" : secrets_path
+    File.exist?("/run/secrets/#{File.basename(secrets_path,".yml")}_secrets") ? secrets_path = "/run/secrets/#{File.basename(secrets_path,".yml")}_secrets" : secrets_path
     File.readlines(secrets_path).each do |line|
       line.chomp!
       key, value = line.split('=',2)

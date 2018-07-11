@@ -8,11 +8,17 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   git-core \
   default-libmysqlclient-dev
 
-RUN mkdir /todos
+SHELL ["/bin/bash", "-c"]
+
+RUN mkdir /zip_workspace
+
+RUN mkdir /bulwark_gitannex_remote
 
 ADD . /usr/src/app/
 
 WORKDIR /usr/src/app/
+
+RUN mkdir /usr/src/app/todos
 
 RUN bundle install
 

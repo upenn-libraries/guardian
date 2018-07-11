@@ -59,7 +59,7 @@ class GlacierArchive < ActiveRecord::Base
   has_many :table_relationship
 end
 
-logger = Logger.new('| tee logger.log')
+logger = Logger.new(STDOUT)
 logger.level = Logger::INFO
 
 TodoRunner.define do
@@ -67,7 +67,7 @@ TodoRunner.define do
   def fetch_source(source, workspace, application, method)
     case "#{application}_#{method}"
       when 'bulwark_gitannex'
-        bg_secrets = SecretsManager.load_secrets('bulwark_gitannex.yml')
+        bg_secrets = SecretsManager.load_secrets('secrets/bulwark_gitannex.yml')
         SecretsManager.set(bg_secrets)
         `git clone #{source} #{workspace}/#{File.basename(source)}`
         Dir.chdir("#{workspace}/#{File.basename(source)}") do
@@ -112,7 +112,7 @@ TodoRunner.define do
   end
 
   def glacier_transfer(todo_data)
-    glacier_secrets = SecretsManager.load_secrets('glacier.yml')
+    glacier_secrets = SecretsManager.load_secrets('secrets/glacier.yml')
     SecretsManager.set(glacier_secrets)
     validate_transfer_data todo_data
     file_path           = todo_data[:compressed_destination]
@@ -147,11 +147,11 @@ TodoRunner.define do
   end
 
   def update_fort_db
-    db = SecretsManager.load_secrets('db.yml')
+    db = SecretsManager.load_secrets('secrets/db.yml')
     ActiveRecord::Base.establish_connection(
         :adapter => db['MYSQL_ADAPTER'],
         :host => db['MYSQL_HOST'],
-        :username=> db['MYSQL_USERNAME'],
+        :username=> db['MYSQL_USER'],
         :password=> db['MYSQL_PASSWORD'],
         :database => db['MYSQL_DATABASE']
     )
@@ -162,9 +162,9 @@ TodoRunner.define do
     SecretsManager.unset(db)
   end
 
-  guardian = SecretsManager.load_secrets('guardian.yml')
+  guardian = SecretsManager.load_secrets('secrets/guardian.yml')
 
-  LOG_FILE = guardian['LOG_FILE']
+  LOG_FILE = "#{guardian['LOG_FILE_PATH']}/completion.txt"
 
   LOG_FILE_SEPARATOR = ' | '
 
@@ -173,7 +173,7 @@ TodoRunner.define do
   task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
     data = YAML.load todo_file
     logger.info("Fetching and assembling archive for #{data[:todo_base]}...")
-    zip_package(data)
+    #zip_package(data)
     logger.info('Archive assembled.')
     true
   end
@@ -182,15 +182,16 @@ TodoRunner.define do
     begin
       data = load_data(todo_file)
       logger.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
-      transfer_values  = glacier_transfer(data)
+      #transfer_values  = glacier_transfer(data)
+      transfer_values = {'key' => 'value'}
       logger.info("Transfer complete.  Logging data to #{LOG_FILE}...")
       log_complete(transfer_values)
       logger.info('Logging complete.  Removing zip artifacts...')
-      remove_zip_artifacts(data)
+      #remove_zip_artifacts(data)
       logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
     rescue ArgumentError => ex
-      puts "ERROR #{ex.message}"
+      logger.fatal("ERROR: #{ex.message}")
       false
     end
     true
