@@ -21,6 +21,7 @@ services:
     image: 'guardian:latest'
     depends_on:
       - 'db'
+      - 'fort_stronghold'
     secrets:
       - db_secrets
       - glacier_secrets
