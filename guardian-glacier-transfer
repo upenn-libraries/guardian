@@ -182,12 +182,11 @@ TodoRunner.define do
     begin
       data = load_data(todo_file)
       logger.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
-      #transfer_values  = glacier_transfer(data)
-      transfer_values = {'key' => 'value'}
+      transfer_values  = glacier_transfer(data)
       logger.info("Transfer complete.  Logging data to #{LOG_FILE}...")
       log_complete(transfer_values)
       logger.info('Logging complete.  Removing zip artifacts...')
-      #remove_zip_artifacts(data)
+      remove_zip_artifacts(data)
       logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
     rescue ArgumentError => ex

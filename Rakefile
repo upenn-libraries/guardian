@@ -11,7 +11,7 @@ task :db_migrate do
       :password=> db['MYSQL_PASSWORD'],
       :database => db['MYSQL_DATABASE']
   )
-  ActiveRecord::Migration.migrate(:up)
+  ActiveRecord::Tasks::DatabaseTasks.migrate
   SecretsManager.unset(db)
 end
 
