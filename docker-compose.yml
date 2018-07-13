@@ -2,13 +2,13 @@ version: '3.1'
 
 secrets:
   db_secrets:
-    file: 'secrets/db.yml'
+    file: 'secrets/db'
   glacier_secrets:
-    file: 'secrets/glacier.yml'
+    file: 'secrets/glacier'
   guardian_secrets:
-    file: 'secrets/guardian.yml'
+    file: 'secrets/guardian'
   bulwark_gitannex_secrets:
-    file: 'secrets/bulwark_gitannex.yml'
+    file: 'secrets/bulwark_gitannex'
 
 services:
   db:
@@ -21,7 +21,6 @@ services:
     image: 'guardian:latest'
     depends_on:
       - 'db'
-      - 'fort_stronghold'
     secrets:
       - db_secrets
       - glacier_secrets
@@ -37,4 +36,3 @@ volumes:
   db:
   guardian:
   guardian_todos:
-  guardian_bulwark:
