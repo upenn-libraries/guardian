@@ -11,5 +11,5 @@ scripts/list
 scripts/batch.sh
 
 # Docker stuff
-secrets/*.yml
+secrets/*.secret
 .env
