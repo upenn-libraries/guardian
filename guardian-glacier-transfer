@@ -173,7 +173,7 @@ TodoRunner.define do
   task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
     data = YAML.load todo_file
     logger.info("Fetching and assembling archive for #{data[:todo_base]}...")
-    #zip_package(data)
+    zip_package(data)
     logger.info('Archive assembled.')
     true
   end
