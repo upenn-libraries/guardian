@@ -67,7 +67,7 @@ TodoRunner.define do
   def fetch_source(source, workspace, application, method)
     case "#{application}_#{method}"
       when 'bulwark_gitannex'
-        bg_secrets = SecretsManager.load_secrets('secrets/bulwark_gitannex.yml')
+        bg_secrets = SecretsManager.load_secrets('secrets/bulwark_gitannex.secret')
         SecretsManager.set(bg_secrets)
         `git clone #{source} #{workspace}/#{File.basename(source)}`
         Dir.chdir("#{workspace}/#{File.basename(source)}") do
@@ -112,7 +112,7 @@ TodoRunner.define do
   end
 
   def glacier_transfer(todo_data)
-    glacier_secrets = SecretsManager.load_secrets('secrets/glacier.yml')
+    glacier_secrets = SecretsManager.load_secrets('secrets/glacier.secret')
     SecretsManager.set(glacier_secrets)
     validate_transfer_data todo_data
     file_path           = todo_data[:compressed_destination]
@@ -147,7 +147,7 @@ TodoRunner.define do
   end
 
   def update_fort_db
-    db = SecretsManager.load_secrets('secrets/db.yml')
+    db = SecretsManager.load_secrets('secrets/db.secret')
     ActiveRecord::Base.establish_connection(
         :adapter => db['MYSQL_ADAPTER'],
         :host => db['MYSQL_HOST'],
@@ -162,7 +162,7 @@ TodoRunner.define do
     SecretsManager.unset(db)
   end
 
-  guardian = SecretsManager.load_secrets('secrets/guardian.yml')
+  guardian = SecretsManager.load_secrets('secrets/guardian.secret')
 
   LOG_FILE = "#{guardian['LOG_FILE_PATH']}/completion.txt"
 
