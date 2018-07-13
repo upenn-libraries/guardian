@@ -1,0 +1,3 @@
+todo_base,source,workspace,compressed_destination,glacier_description,glacier_vault,application,method
+directive_name_1,/$DOCKER_PATH/directive_name_1,/zip_workspace,/zip_workspace/directive_name_1.zip,"{ description: directive_name_1, owner: katherly }",vault_name,bulwark,gitannex
+directive_name_2,/$DOCKER_PATH/directive_name_2,/zip_workspace,/zip_workspace/directive_name_2.zip,"{ description: directive_name_2 , owner: katherly }",vault_name,bulwark,gitannex
