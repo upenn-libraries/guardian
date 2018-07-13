@@ -32,3 +32,11 @@ ruby guardian-glacier-transfer $PATH_TO_TODO_FILE
 ```
 
 Where `$PATH_TO_TODO_FILE` is the path on the filesystem to the todo file (YAML manifest) that represents an object being transferred to Glacier.  Note that this script runs on a per-file basis.  To upload in batches, a bash script is recommended.
+
+## Dockerized Usage
+
+```bash
+docker cp $CSV_MANIFEST $GUARDIAN_CONTAIER:/usr/src/app/.
+docker exec -it $GUARDIAN_CONTAINER ruby guardian-make-todo $CSV_MANIFEST todos/
+docker exec -it $GUARDIAN_CONTAINER bash -c "ruby guardian-glacier-transfer todos/*.todo"
+```

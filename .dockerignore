@@ -1,0 +1,4 @@
+.idea
+*.csv
+todos/
+logger.log

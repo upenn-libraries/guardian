@@ -1,8 +1,15 @@
+# Ruby stuff
 .ruby-version
 .idea/
+
+# Development artifacts
 *.csv
 logger.log
 todos/
 completion.txt
 scripts/list
 scripts/batch.sh
+
+# Docker stuff
+secrets/*.yml
+.env

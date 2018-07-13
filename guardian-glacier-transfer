@@ -8,6 +8,8 @@ require 'todo_runner'
 require 'yaml'
 require 'zip'
 
+require_relative('lib/secrets_manager')
+
 # Copied from https://github.com/rubyzip/rubyzip
 
 class ZipFileGenerator
@@ -18,7 +20,6 @@ class ZipFileGenerator
 
   def write
     entries = Dir.entries(@input_dir) - %w(. ..)
-
     ::Zip::File.open(@output_file, ::Zip::File::CREATE) do |zipfile|
       write_entries entries, '', zipfile
     end
@@ -51,38 +52,30 @@ class ZipFileGenerator
       f.write(File.open(disk_file_path, 'rb').read)
     end
   end
+
 end
 
 class GlacierArchive < ActiveRecord::Base
   has_many :table_relationship
 end
 
-ActiveRecord::Base.establish_connection(
-    :adapter => 'mysql2',
-    :host => ENV['STRONGHOLD_HOST'],
-    :username=> ENV['STRONGHOLD_USERNAME'],
-    :password=> ENV['STRONGHOLD_PASSWORD'],
-    :database => ENV['STRONGHOLD_DB']
-)
-
-logger = Logger.new('| tee logger.log')
+logger = Logger.new(STDOUT)
 logger.level = Logger::INFO
 
 TodoRunner.define do
 
-  LOG_FILE = ENV['LOG_FILE']
-
-  LOG_FILE_SEPARATOR = ' | '
-
   def fetch_source(source, workspace, application, method)
     case "#{application}_#{method}"
       when 'bulwark_gitannex'
+        bg_secrets = SecretsManager.load_secrets('secrets/bulwark_gitannex.yml')
+        SecretsManager.set(bg_secrets)
         `git clone #{source} #{workspace}/#{File.basename(source)}`
         Dir.chdir("#{workspace}/#{File.basename(source)}") do
           `./.repoadmin/bin/init.sh`
           `git annex get .`
           `git annex unlock .`
         end
+        SecretsManager.unset(bg_secrets)
         return "#{workspace}/#{File.basename(source)}"
       when 'openn_rsync'
         #TODO: Fill this out
@@ -119,12 +112,16 @@ TodoRunner.define do
   end
 
   def glacier_transfer(todo_data)
+    glacier_secrets = SecretsManager.load_secrets('secrets/glacier.yml')
+    SecretsManager.set(glacier_secrets)
     validate_transfer_data todo_data
     file_path           = todo_data[:compressed_destination]
     archive_description = todo_data[:glacier_description]
     vault_id            = todo_data[:glacier_vault]
     client              = Stronghold::Client.new
-    client.create_backup vault_id, file_path, archive_description
+    backup_ids = client.create_backup vault_id, file_path, archive_description
+    SecretsManager.unset(glacier_secrets)
+    return backup_ids
   end
 
   def log_complete(values_hash)
@@ -150,11 +147,26 @@ TodoRunner.define do
   end
 
   def update_fort_db
+    db = SecretsManager.load_secrets('secrets/db.yml')
+    ActiveRecord::Base.establish_connection(
+        :adapter => db['MYSQL_ADAPTER'],
+        :host => db['MYSQL_HOST'],
+        :username=> db['MYSQL_USER'],
+        :password=> db['MYSQL_PASSWORD'],
+        :database => db['MYSQL_DATABASE']
+    )
     File.open(File.absolute_path(LOG_FILE)).each_line do |line|
       description, archive_id = line.split(LOG_FILE_SEPARATOR)
       GlacierArchive.create(:description => description, :archive_id => archive_id)
     end
+    SecretsManager.unset(db)
   end
+
+  guardian = SecretsManager.load_secrets('secrets/guardian.yml')
+
+  LOG_FILE = "#{guardian['LOG_FILE_PATH']}/completion.txt"
+
+  LOG_FILE_SEPARATOR = ' | '
 
   start :zip
 
@@ -178,7 +190,7 @@ TodoRunner.define do
       logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
     rescue ArgumentError => ex
-      puts "ERROR #{ex.message}"
+      logger.fatal("ERROR: #{ex.message}")
       false
     end
     true

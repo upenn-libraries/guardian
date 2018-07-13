@@ -1,0 +1,40 @@
+version: '3.1'
+
+secrets:
+  db_secrets:
+    file: 'secrets/db.yml'
+  glacier_secrets:
+    file: 'secrets/glacier.yml'
+  guardian_secrets:
+    file: 'secrets/guardian.yml'
+  bulwark_gitannex_secrets:
+    file: 'secrets/bulwark_gitannex.yml'
+
+services:
+  db:
+    image: 'guardian_db:5.7'
+    secrets:
+      - db_secrets
+    volumes:
+      - 'db:/var/lib/mysql'
+  guardian:
+    image: 'guardian:latest'
+    depends_on:
+      - 'db'
+      - 'fort_stronghold'
+    secrets:
+      - db_secrets
+      - glacier_secrets
+      - guardian_secrets
+      - bulwark_gitannex_secrets
+    volumes:
+      - 'guardian:/usr/src/app'
+      - 'guardian_todos:/todos'
+      - '${LOCAL_BG_REMOTE}:/bulwark_gitannex_remote'
+      - '${LOCAL_ZIP_WORKSPACE}:/zip_workspace'
+      - '${LOCAL_LOG_FILE}:/usr/src/app/logs'
+volumes:
+  db:
+  guardian:
+  guardian_todos:
+  guardian_bulwark:
