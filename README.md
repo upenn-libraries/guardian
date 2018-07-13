@@ -12,7 +12,7 @@ Guardian is an orchestration script for assembling objects into Glacier-ready pa
 
 Guardian currently supports assembly and transfer of objects for the following applications:
 
-* [Bulwark](ht) and git-annex
+* [Bulwark](https://github.com/upenn-libraries/bulwark) using [git-annex](https://git-annex.branchable.com/)
 
 ## Usage
 
