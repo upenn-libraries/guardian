@@ -67,7 +67,7 @@ TodoRunner.define do
   def fetch_source(source, workspace, application, method)
     case "#{application}_#{method}"
       when 'bulwark_gitannex'
-        bg_secrets = SecretsManager.load_secrets('secrets/bulwark_gitannex.yml')
+        bg_secrets = SecretsManager.load_secrets('secrets/bulwark_gitannex.secret')
         SecretsManager.set(bg_secrets)
         `git clone #{source} #{workspace}/#{File.basename(source)}`
         Dir.chdir("#{workspace}/#{File.basename(source)}") do
@@ -112,7 +112,7 @@ TodoRunner.define do
   end
 
   def glacier_transfer(todo_data)
-    glacier_secrets = SecretsManager.load_secrets('secrets/glacier.yml')
+    glacier_secrets = SecretsManager.load_secrets('secrets/glacier.secret')
     SecretsManager.set(glacier_secrets)
     validate_transfer_data todo_data
     file_path           = todo_data[:compressed_destination]
@@ -124,10 +124,10 @@ TodoRunner.define do
     return backup_ids
   end
 
-  def log_complete(values_hash)
+  def log_complete(values_hash, vault_name)
     formatted_string = ''
     values_hash.each do |key, value|
-      formatted_string << "#{key}#{LOG_FILE_SEPARATOR}#{value}\n"
+      formatted_string << "#{key}#{LOG_FILE_SEPARATOR}#{value}#{LOG_FILE_SEPARATOR}#{vault_name}\n"
     end
     File.open(LOG_FILE, 'a') { |file| file.write(formatted_string) }
     true
@@ -147,7 +147,7 @@ TodoRunner.define do
   end
 
   def update_fort_db
-    db = SecretsManager.load_secrets('secrets/db.yml')
+    db = SecretsManager.load_secrets('secrets/db.secret')
     ActiveRecord::Base.establish_connection(
         :adapter => db['MYSQL_ADAPTER'],
         :host => db['MYSQL_HOST'],
@@ -156,15 +156,17 @@ TodoRunner.define do
         :database => db['MYSQL_DATABASE']
     )
     File.open(File.absolute_path(LOG_FILE)).each_line do |line|
-      description, archive_id = line.split(LOG_FILE_SEPARATOR)
-      GlacierArchive.create(:description => description, :archive_id => archive_id)
+      description, archive_id, vault = line.split(LOG_FILE_SEPARATOR)
+      GlacierArchive.create(:description => description, :archive_id => archive_id, :vault => vault)
     end
     SecretsManager.unset(db)
   end
 
-  guardian = SecretsManager.load_secrets('secrets/guardian.yml')
+  guardian = SecretsManager.load_secrets('secrets/guardian.secret')
 
   LOG_FILE = "#{guardian['LOG_FILE_PATH']}/completion.txt"
+
+  abort("Log file detected at #{LOG_FILE}, aborting.") if File.exist?(LOG_FILE)
 
   LOG_FILE_SEPARATOR = ' | '
 
@@ -184,7 +186,7 @@ TodoRunner.define do
       logger.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
       transfer_values  = glacier_transfer(data)
       logger.info("Transfer complete.  Logging data to #{LOG_FILE}...")
-      log_complete(transfer_values)
+      log_complete(transfer_values, data[:glacier_vault])
       logger.info('Logging complete.  Removing zip artifacts...')
       remove_zip_artifacts(data)
       logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
@@ -200,6 +202,8 @@ TodoRunner.define do
     logger.info('Updating database with transfer information...')
     update_fort_db
     logger.info('Database updated.')
+    File.delete(LOG_FILE)
+    logger.info("#{LOG_FILE} removed.")
   end
 
 end

@@ -76,7 +76,7 @@ Your deployment is now ready for use.
 Workflow syntax in Swarm is as follows:
 
 ```bash
-docker cp $CSV_MANIFEST $GUARDIAN_CONTAIER:/usr/src/app/.
+docker cp $CSV_MANIFEST $GUARDIAN_CONTAINER:/usr/src/app/.
 docker exec -it $GUARDIAN_CONTAINER ruby guardian-make-todo $CSV_MANIFEST todos/
 docker exec -it $GUARDIAN_CONTAINER bash -c "ruby guardian-glacier-transfer todos/*.todo"
 ```

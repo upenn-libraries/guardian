@@ -4,11 +4,9 @@ MAINTAINER katherly@upenn.edu
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   build-essential \
+  default-libmysqlclient-dev \
   git-annex \
-  git-core \
-  default-libmysqlclient-dev
-
-SHELL ["/bin/bash", "-c"]
+  git-core
 
 RUN mkdir /zip_workspace
 
