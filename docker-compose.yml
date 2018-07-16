@@ -2,13 +2,13 @@ version: '3.1'
 
 secrets:
   db_secrets:
-    file: 'secrets/db'
+    file: 'secrets/db.secret'
   glacier_secrets:
-    file: 'secrets/glacier'
+    file: 'secrets/glacier.secret'
   guardian_secrets:
-    file: 'secrets/guardian'
+    file: 'secrets/guardian.secret'
   bulwark_gitannex_secrets:
-    file: 'secrets/bulwark_gitannex'
+    file: 'secrets/bulwark_gitannex.secret'
 
 services:
   db:
