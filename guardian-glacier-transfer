@@ -156,6 +156,7 @@ TodoRunner.define do
         :database => db['MYSQL_DATABASE']
     )
     File.open(File.absolute_path(LOG_FILE)).each_line do |line|
+      line.chomp!
       description, archive_id, vault = line.split(LOG_FILE_SEPARATOR)
       GlacierArchive.create(:description => description, :archive_id => archive_id, :vault => vault)
     end
@@ -173,11 +174,16 @@ TodoRunner.define do
   start :zip
 
   task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
-    data = YAML.load todo_file
-    logger.info("Fetching and assembling archive for #{data[:todo_base]}...")
-    zip_package(data)
-    logger.info('Archive assembled.')
-    true
+    begin
+      data = YAML.load todo_file
+      logger.info("Fetching and assembling archive for #{data[:todo_base]}...")
+      zip_package(data)
+      logger.info('Archive assembled.')
+      true
+    rescue Exception => ex
+      logger.fatal("ERROR: #{ex.message}")
+      false
+    end
   end
 
   task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
@@ -191,19 +197,23 @@ TodoRunner.define do
       remove_zip_artifacts(data)
       logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
-    rescue ArgumentError => ex
+    rescue Exception => ex
       logger.fatal("ERROR: #{ex.message}")
       false
     end
-    true
   end
 
   after :all do
-    logger.info('Updating database with transfer information...')
-    update_fort_db
-    logger.info('Database updated.')
-    File.delete(LOG_FILE)
-    logger.info("#{LOG_FILE} removed.")
+    if File.exist?(LOG_FILE)
+      logger.info('Updating database with transfer information...')
+      update_fort_db
+      logger.info('Database updated.')
+      File.delete(LOG_FILE)
+      logger.info("#{LOG_FILE} removed.")
+    else
+      logger.fatal("No log file detected at #{LOG_FILE} in after_all block.")
+    end
+
   end
 
 end
