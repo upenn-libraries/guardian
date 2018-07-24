@@ -156,6 +156,7 @@ TodoRunner.define do
         :database => db['MYSQL_DATABASE']
     )
     File.open(File.absolute_path(LOG_FILE)).each_line do |line|
+      line.chomp!
       description, archive_id, vault = line.split(LOG_FILE_SEPARATOR)
       GlacierArchive.create(:description => description, :archive_id => archive_id, :vault => vault)
     end
