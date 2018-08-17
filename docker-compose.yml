@@ -31,7 +31,6 @@ services:
     volumes:
       - 'guardian:/usr/src/app'
       - 'guardian_todos:/todos'
-      - '${LOCAL_BG_REMOTE}:/bulwark_gitannex_remote'
       - '${LOCAL_ZIP_WORKSPACE}:/zip_workspace'
       - '${LOCAL_LOG_FILE}:/usr/src/app/logs'
 volumes:
