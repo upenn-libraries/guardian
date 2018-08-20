@@ -10,7 +10,7 @@ secrets:
   bulwark_gitannex_secrets:
     file: 'secrets/bulwark_gitannex.secret'
   bulwark_rsa:
-    external: 'true'
+    external: true
 services:
   db:
     image: 'guardian_db:5.7'
@@ -27,7 +27,9 @@ services:
       - glacier_secrets
       - guardian_secrets
       - bulwark_gitannex_secrets
-      - bulwark_rsa
+      - source: bulwark_rsa
+        target: /root/.ssh/bulwark_rsa
+        mode: 0600
     volumes:
       - 'guardian:/usr/src/app'
       - 'guardian_todos:/todos'
