@@ -11,6 +11,10 @@ secrets:
     file: 'secrets/bulwark_gitannex.secret'
   bulwark_rsa:
     external: true
+
+  configs:
+    known_hosts:
+      file: 'known_hosts'
 services:
   db:
     image: 'guardian_db:5.7'
@@ -30,6 +34,9 @@ services:
       - source: bulwark_rsa
         target: /root/.ssh/bulwark_rsa
         mode: 0600
+    config:
+      - source: 'known_hosts'
+        target: '/root/.ssh/known_hosts'
     volumes:
       - 'guardian:/usr/src/app'
       - 'guardian_todos:/todos'
