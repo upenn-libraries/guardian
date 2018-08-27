@@ -1,4 +1,4 @@
-version: '3.1'
+version: '3.7'
 
 secrets:
   db_secrets:
@@ -12,9 +12,12 @@ secrets:
   bulwark_rsa:
     external: true
 
-  configs:
-    known_hosts:
-      file: 'known_hosts'
+configs:
+  known_hosts:
+    file: 'known_hosts'
+  ssh_config:
+    file: 'ssh_config'
+
 services:
   db:
     image: 'guardian_db:5.7'
@@ -34,9 +37,11 @@ services:
       - source: bulwark_rsa
         target: /root/.ssh/bulwark_rsa
         mode: 0600
-    config:
+    configs:
       - source: 'known_hosts'
         target: '/root/.ssh/known_hosts'
+      - source: 'ssh_config'
+        target: '/root/.ssh/config'
     volumes:
       - 'guardian:/usr/src/app'
       - 'guardian_todos:/todos'

@@ -1,0 +1,4 @@
+Host colenda-dev.library.upenn.int
+    Hostname colenda-dev.library.upenn.int
+    IdentityFile ~/.ssh/bulwark_rsa
+    IdentitiesOnly yes
