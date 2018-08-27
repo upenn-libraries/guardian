@@ -1,4 +1,4 @@
-version: '3.1'
+version: '3.7'
 
 secrets:
   db_secrets:
@@ -9,6 +9,14 @@ secrets:
     file: 'secrets/guardian.secret'
   bulwark_gitannex_secrets:
     file: 'secrets/bulwark_gitannex.secret'
+  bulwark_rsa:
+    external: true
+
+configs:
+  known_hosts:
+    file: 'known_hosts'
+  ssh_config:
+    file: 'ssh_config'
 
 services:
   db:
@@ -26,10 +34,17 @@ services:
       - glacier_secrets
       - guardian_secrets
       - bulwark_gitannex_secrets
+      - source: bulwark_rsa
+        target: /root/.ssh/bulwark_rsa
+        mode: 0600
+    configs:
+      - source: 'known_hosts'
+        target: '/root/.ssh/known_hosts'
+      - source: 'ssh_config'
+        target: '/root/.ssh/config'
     volumes:
       - 'guardian:/usr/src/app'
       - 'guardian_todos:/todos'
-      - '${LOCAL_BG_REMOTE}:/bulwark_gitannex_remote'
       - '${LOCAL_ZIP_WORKSPACE}:/zip_workspace'
       - '${LOCAL_LOG_FILE}:/usr/src/app/logs'
 volumes:
