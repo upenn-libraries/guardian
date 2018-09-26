@@ -5,6 +5,10 @@ secrets:
     file: 'secrets/db.secret'
   glacier_secrets:
     file: 'secrets/glacier.secret'
+  guardian_db_password:
+    external: true
+  guardian_db_root_password:
+    external: true
   guardian_secrets:
     file: 'secrets/guardian.secret'
   bulwark_gitannex_secrets:
@@ -20,9 +24,15 @@ configs:
 
 services:
   db:
-    image: 'guardian_db:5.7'
+    image: 'mysql:5.7'
+    environment:
+      MYSQL_DATABASE: guardian_db
+      MYSQL_PASSWORD_FILE: /run/secrets/guardian_db_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/guardian_db_root_password
+      MYSQL_USER: guardian_user
     secrets:
-      - db_secrets
+      - guardian_db_password
+      - guardian_db_root_password
     volumes:
       - 'db:/var/lib/mysql'
   guardian:
