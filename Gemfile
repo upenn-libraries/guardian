@@ -1,12 +1,11 @@
 source 'https://rubygems.org'
-source 'http://tuka.library.upenn.int:9292'
 
 gem 'activerecord'
 gem 'mysql2'
 gem 'rubyzip'
 gem 'smarter_csv'
-gem 'stronghold', '~> 0.1.4.1'
-gem 'todo_runner'
+gem 'stronghold', git: 'https://github.com/upenn-libraries/stronghold.git', branch: 'master'
+gem 'todo_runner', git: 'https://github.com/upenn-libraries/todo_runner.git', branch: 'master'
 
 
 group :development do
