@@ -5,7 +5,7 @@ gem 'activerecord'
 gem 'mysql2'
 gem 'rubyzip'
 gem 'smarter_csv'
-gem 'stronghold', '~> 0.1.2'
+gem 'stronghold', '~> 0.1.3'
 gem 'todo_runner'
 
 
