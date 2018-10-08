@@ -36,7 +36,7 @@ services:
     volumes:
       - 'db:/var/lib/mysql'
   guardian:
-    image: 'guardian:latest'
+    image: 'quay.io/upennlibraries/guardian:latest'
     depends_on:
       - 'db'
     secrets:
