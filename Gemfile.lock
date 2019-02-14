@@ -1,6 +1,20 @@
+GIT
+  remote: https://github.com/upenn-libraries/stronghold.git
+  revision: b4613a7ad21db4dc76764137af981a7373e2dd81
+  branch: master
+  specs:
+    stronghold (0.1.4.1)
+      fog-aws (~> 2.0)
+
+GIT
+  remote: https://github.com/upenn-libraries/todo_runner.git
+  revision: 007a40b8024413275dde685f346e7969d08f5b05
+  branch: master
+  specs:
+    todo_runner (0.4.1)
+
 GEM
   remote: https://rubygems.org/
-  remote: http://tuka.library.upenn.int:9292/
   specs:
     activemodel (5.2.0)
       activesupport (= 5.2.0)
@@ -38,21 +52,18 @@ GEM
       concurrent-ruby (~> 1.0)
     ipaddress (0.8.3)
     method_source (0.9.0)
-    mini_portile2 (2.3.0)
+    mini_portile2 (2.4.0)
     minitest (5.11.3)
     multi_json (1.13.1)
     mysql2 (0.5.1)
-    nokogiri (1.8.5)
-      mini_portile2 (~> 2.3.0)
+    nokogiri (1.10.1)
+      mini_portile2 (~> 2.4.0)
     pry (0.11.3)
       coderay (~> 1.1.0)
       method_source (~> 0.9.0)
     rubyzip (1.2.1)
     smarter_csv (1.2.3)
-    stronghold (0.1.4.1)
-      fog-aws (~> 2.0)
     thread_safe (0.3.6)
-    todo_runner (0.3.1)
     tzinfo (1.2.5)
       thread_safe (~> 0.1)
 
@@ -65,8 +76,8 @@ DEPENDENCIES
   pry
   rubyzip
   smarter_csv
-  stronghold (~> 0.1.4.1)
-  todo_runner
+  stronghold!
+  todo_runner!
 
 BUNDLED WITH
    1.16.5

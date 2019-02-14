@@ -55,9 +55,23 @@ services:
     volumes:
       - 'guardian:/usr/src/app'
       - 'guardian_todos:/todos'
+      - 'openn_site_data:openn_site_data'
+      - 'openn_walters_data:openn_walters_data'
       - '${LOCAL_ZIP_WORKSPACE}:/zip_workspace'
       - '${LOCAL_LOG_FILE}:/usr/src/app/logs'
 volumes:
   db:
   guardian:
   guardian_todos:
+  openn_site_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${OPENN_SITE_DATA_ADDRPERMS}
+      device: ":${OPENN_SITE_DATA_DEVICE}"
+  openn_walters_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${OPENN_WALTERS_ADDRPERMS}
+      device: ":${OPENN_WALTERS_DEVICE}"
