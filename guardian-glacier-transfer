@@ -7,8 +7,24 @@ require 'stronghold'
 require 'todo_runner'
 require 'yaml'
 require 'zip'
+require 'rsync'
+require 'shellwords'
 
 require_relative('lib/secrets_manager')
+require_relative('lib/chunk_sizer')
+
+##
+# Monkey patching Rsync::Result to get useful error messages.
+class Rsync::Result
+  def raw
+    @raw
+  end
+
+  def full_error
+    return if self.success?
+    raw.split($/).grep(/^rsync( error)?:/).join $/
+  end
+end
 
 # Copied from https://github.com/rubyzip/rubyzip
 
@@ -78,7 +94,15 @@ TodoRunner.define do
         SecretsManager.unset(bg_secrets)
         return "#{workspace}/#{File.basename(source)}"
       when 'openn_rsync'
-        #TODO: Fill this out
+        rsync_opts  = "-rltDv --no-owner --no-group"
+        source_path = Shellwords.escape(source)
+        dest        = File.join(workspace, File.basename(source))
+        dest_path   = Shellwords.escape(dest)
+
+        result      = Rsync.run(source_path, dest_path, rsync_opts)
+        raise "Fetch failure, method=openn_rsync: #{result.full_error}" unless result.success?
+
+        return dest
       else
         raise "Invalid application #{application} specified."
     end
@@ -118,7 +142,8 @@ TodoRunner.define do
     file_path           = todo_data[:compressed_destination]
     archive_description = todo_data[:glacier_description]
     vault_id            = todo_data[:glacier_vault]
-    client              = Stronghold::Client.new
+    chunk_size          = ChunkSizer.calculate(File.stat(file_path).size)
+    client              = Stronghold::Client.new(:multipart_chunk_size => chunk_size)
     backup_ids = client.create_backup vault_id, file_path, archive_description
     SecretsManager.unset(glacier_secrets)
     return backup_ids
