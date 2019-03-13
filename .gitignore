@@ -13,3 +13,4 @@ scripts/batch.sh
 # Docker stuff
 secrets/*.secret
 .env
+/test
