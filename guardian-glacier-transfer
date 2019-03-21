@@ -76,8 +76,8 @@ class GlacierArchive < ActiveRecord::Base
   has_many :table_relationship
 end
 
-logger = Logger.new(STDOUT)
-logger.level = Logger::INFO
+LOGGER = Logger.new(STDOUT)
+LOGGER.level = Logger::INFO
 
 TodoRunner.define do
 
@@ -111,19 +111,6 @@ TodoRunner.define do
 
         result      = Rsync.run(source_path, dest_path, rsync_opts)
         raise "Fetch failure, method=openn_rsync: #{result.full_error}" unless result.success?
-        binding.pry
-        valid = true
-        message_io = STDOUT
-        Dir.chdir(dest) do
-          MANIFEST_MAP.each do |manifest, algorithm|
-            if File.file?(manifest)
-              # logger.info("Validating manifest #{File.join dest, manifest}")
-              valid &&= ManifestValidation::validate_manifest(manifest, algorithm, message_io: message_io)
-            end
-          end
-        end
-        # logger.info("Manifest validation result for #{dest}: #{valid}")
-        raise "Manifest validation failed #{dest}" unless valid
 
         return dest
       else
@@ -131,9 +118,32 @@ TodoRunner.define do
     end
   end
 
+  def verify path, application, method
+    # TODO: make manifest & algorithm configurable? allow user to pass manifest path
+    valid = true
+    case "#{application}_#{method}"
+    when 'bulwark_gitannex'
+      # TODO: fill this in
+    when 'openn_rsync'
+      message_io = STDOUT
+      Dir.chdir(path) do
+        MANIFEST_MAP.each do |manifest, algorithm|
+          if File.file?(manifest)
+            LOGGER.info("Validating manifest #{File.join path, manifest}")
+            valid &&= ManifestValidation::validate_manifest(manifest, algorithm, message_io: message_io)
+          end
+        end
+      end
+      LOGGER.info("Manifest validation result for #{path}: #{valid}")
+    else
+      raise "Invalid application #{application} specified."
+    end
+
+    return valid
+  end
+
   def zip_package(manifest_data)
-    directory_to_zip = fetch_source(manifest_data[:source], manifest_data[:workspace], manifest_data[:application], manifest_data[:method])
-    zip_package = ZipFileGenerator.new(directory_to_zip, manifest_data[:compressed_destination])
+    zip_package = ZipFileGenerator.new(manifest_data[:fetched_source], manifest_data[:compressed_destination])
     zip_package.write
     true
   end
@@ -202,44 +212,83 @@ TodoRunner.define do
 
   guardian = SecretsManager.load_secrets('secrets/guardian.secret')
 
-  start :zip
+  start :fetch_source
 
-  task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
+  task :fetch_source, on_fail: :FAIL, next_step: :verify_fetch do |todo_file|
     begin
       data = YAML.load todo_file
-      logger.info("Fetching and assembling archive for #{data[:todo_base]}...")
-      zip_package(data)
-      logger.info('Archive assembled.')
+      LOGGER.info("Fetching archive for #{data[:todo_base]}...")
+      # def fetch_source(source, workspace, application, method)
+      fetched_source = fetch_source(data[:source], data[:workspace], data[:application], data[:method])
+
+      # save the directory to zip to the todo file (used in next step)
+      data[:fetched_source] = fetched_source
+      todo_file.rewrite data.to_yaml
       true
-      false # @todo debugging code; remove
     rescue Exception => ex
-      logger.fatal("ERROR: #{ex.message}")
+      LOGGER.fatal("ERROR: #{ex.message}")
       false
     end
   end
 
+  task :verify_fetch, on_fail: :FAIL, next_step: :zip do |todo_file|
+    begin
+      data = YAML.load todo_file
+      LOGGER.info("Verifying fetched data for #{data[:todo_base]}...")
+      valid = verify(data[:fetched_source], data[:application], data[:method])
+      if valid
+        LOGGER.info("Fetched data verified :#{data[:fetched_source]}")
+      else
+        LOGGER.error("Verification failure: #{data[:fetched_source]}")
+      end
+      valid
+    rescue Exception => ex
+      LOGGER.fatal("ERROR: #{ex.message}")
+      false
+    end
+  end
+
+  task :zip, on_fail: :FAIL, next_step: :verify_zip do |todo_file|
+    begin
+      data = YAML.load todo_file
+      LOGGER.info("Assembling archive for #{data[:todo_base]}...")
+      zip_package(data)
+      LOGGER.info('Archive assembled.')
+      true
+    rescue Exception => ex
+      LOGGER.fatal("ERROR: #{ex.message}")
+      false
+    end
+  end
+
+  task :verify_zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
+    LOGGER.error("ERROR: intentionally failing test job")
+    false
+  end
+
+
   task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
     begin
       data = load_data(todo_file)
-      logger.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
+      LOGGER.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
       transfer_values  = glacier_transfer(data)
-      logger.info("Transfer complete.  Updating database with transfer information...")
+      LOGGER.info("Transfer complete.  Updating database with transfer information...")
       update_fort_db(transfer_values, data[:glacier_vault])
-      logger.info('Database updated.')
-      logger.info('Removing zip artifacts...')
+      LOGGER.info('Database updated.')
+      LOGGER.info('Removing zip artifacts...')
       remove_zip_artifacts(data)
-      logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
+      LOGGER.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
     rescue Exception => ex
-      logger.fatal("ERROR: #{ex.message}")
+      LOGGER.fatal("ERROR: #{ex.message}")
       false
     end
   end
 
 end
 
-logger.info('Todo Runner initialized, starting run...')
+LOGGER.info('Todo Runner initialized, starting run...')
 
 TodoRunner.run(*ARGV)
 
-logger.info('Run complete.')
+LOGGER.info('Run complete.')
