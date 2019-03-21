@@ -149,15 +149,6 @@ TodoRunner.define do
     return backup_ids
   end
 
-  def log_complete(values_hash, vault_name)
-    formatted_string = ''
-    values_hash.each do |key, value|
-      formatted_string << "#{key}#{LOG_FILE_SEPARATOR}#{value}#{LOG_FILE_SEPARATOR}#{vault_name}\n"
-    end
-    File.open(LOG_FILE, 'a') { |file| file.write(formatted_string) }
-    true
-  end
-
   def remove_zip_artifacts(todo_data)
     Dir.glob("#{todo_data[:workspace]}/*") do |path|
       git_annex_drop(path) if todo_data[:method] == 'gitannex' && File.extname(path) == '.git'
@@ -171,7 +162,7 @@ TodoRunner.define do
     end
   end
 
-  def update_fort_db
+  def update_fort_db(values_hash, vault_name)
     db = SecretsManager.load_secrets('secrets/db.secret')
     ActiveRecord::Base.establish_connection(
         :adapter => db['MYSQL_ADAPTER'],
@@ -180,21 +171,13 @@ TodoRunner.define do
         :password=> db['MYSQL_PASSWORD'],
         :database => db['MYSQL_DATABASE']
     )
-    File.open(File.absolute_path(LOG_FILE)).each_line do |line|
-      line.chomp!
-      description, archive_id, vault = line.split(LOG_FILE_SEPARATOR)
-      GlacierArchive.create(:description => description, :archive_id => archive_id, :vault => vault)
+    values_hash.each do |key, value|
+      GlacierArchive.create(:description => value, :archive_id => key, :vault => vault_name)
     end
     SecretsManager.unset(db)
   end
 
   guardian = SecretsManager.load_secrets('secrets/guardian.secret')
-
-  LOG_FILE = "#{guardian['LOG_FILE_PATH']}/completion.txt"
-
-  abort("Log file detected at #{LOG_FILE}, aborting.") if File.exist?(LOG_FILE)
-
-  LOG_FILE_SEPARATOR = ' | '
 
   start :zip
 
@@ -216,9 +199,10 @@ TodoRunner.define do
       data = load_data(todo_file)
       logger.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
       transfer_values  = glacier_transfer(data)
-      logger.info("Transfer complete.  Logging data to #{LOG_FILE}...")
-      log_complete(transfer_values, data[:glacier_vault])
-      logger.info('Logging complete.  Removing zip artifacts...')
+      logger.info("Transfer complete.  Updating database with transfer information...")
+      update_fort_db(transfer_values, data[:glacier_vault])
+      logger.info('Database updated.')
+      logger.info('Removing zip artifacts...')
       remove_zip_artifacts(data)
       logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
@@ -226,19 +210,6 @@ TodoRunner.define do
       logger.fatal("ERROR: #{ex.message}")
       false
     end
-  end
-
-  after :all do
-    if File.exist?(LOG_FILE)
-      logger.info('Updating database with transfer information...')
-      update_fort_db
-      logger.info('Database updated.')
-      File.delete(LOG_FILE)
-      logger.info("#{LOG_FILE} removed.")
-    else
-      logger.fatal("No log file detected at #{LOG_FILE} in after_all block.")
-    end
-
   end
 
 end
