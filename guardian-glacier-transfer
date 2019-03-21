@@ -12,6 +12,7 @@ require 'shellwords'
 
 require_relative('lib/secrets_manager')
 require_relative('lib/chunk_sizer')
+require_relative('lib/manifest_validation')
 
 ##
 # Monkey patching Rsync::Result to get useful error messages.
@@ -80,6 +81,14 @@ logger.level = Logger::INFO
 
 TodoRunner.define do
 
+  MANIFEST_MAP = {
+    'manifest-sha1.txt'   => 'sha1',
+    'manifest-sha256.txt' => 'sha256',
+    'manifest-sha384.txt' => 'sha384',
+    'manifest-sha512.txt' => 'sha512',
+    'manifest-md5.txt'    => 'md5'
+  }.freeze
+
   def fetch_source(source, workspace, application, method)
     case "#{application}_#{method}"
       when 'bulwark_gitannex'
@@ -95,12 +104,26 @@ TodoRunner.define do
         return "#{workspace}/#{File.basename(source)}"
       when 'openn_rsync'
         rsync_opts  = "-rltDv --no-owner --no-group"
-        source_path = Shellwords.escape(source)
+        source_path =  source =~ %r{/$} ? source : "#{source}/"
         dest        = File.join(workspace, File.basename(source))
-        dest_path   = Shellwords.escape(dest)
+        Dir.mkdir(dest) unless File.exist?(dest)
+        dest_path   = Shellwords.escape("#{dest}/")
 
         result      = Rsync.run(source_path, dest_path, rsync_opts)
         raise "Fetch failure, method=openn_rsync: #{result.full_error}" unless result.success?
+        binding.pry
+        valid = true
+        message_io = STDOUT
+        Dir.chdir(dest) do
+          MANIFEST_MAP.each do |manifest, algorithm|
+            if File.file?(manifest)
+              # logger.info("Validating manifest #{File.join dest, manifest}")
+              valid &&= ManifestValidation::validate_manifest(manifest, algorithm, message_io: message_io)
+            end
+          end
+        end
+        # logger.info("Manifest validation result for #{dest}: #{valid}")
+        raise "Manifest validation failed #{dest}" unless valid
 
         return dest
       else
@@ -188,6 +211,7 @@ TodoRunner.define do
       zip_package(data)
       logger.info('Archive assembled.')
       true
+      false # @todo debugging code; remove
     rescue Exception => ex
       logger.fatal("ERROR: #{ex.message}")
       false
