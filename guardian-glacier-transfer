@@ -6,13 +6,14 @@ require 'logger'
 require 'stronghold'
 require 'todo_runner'
 require 'yaml'
+require 'json'
 require 'zip'
 require 'rsync'
 require 'shellwords'
 
 require_relative('lib/secrets_manager')
 require_relative('lib/chunk_sizer')
-require_relative('lib/manifest_validation')
+require_relative('lib/checksum')
 
 ##
 # Monkey patching Rsync::Result to get useful error messages.
@@ -87,17 +88,11 @@ class GlacierArchive < ActiveRecord::Base
 end
 
 LOGGER = Logger.new(STDOUT)
-LOGGER.level = Logger::INFO
+LOGGER.level = ENV['GUARDIAN_LOG_LEVEL'] || Logger::INFO
 
 TodoRunner.define do
 
-  MANIFEST_MAP = {
-    'manifest-sha1.txt'   => 'sha1',
-    'manifest-sha256.txt' => 'sha256',
-    'manifest-sha384.txt' => 'sha384',
-    'manifest-sha512.txt' => 'sha512',
-    'manifest-md5.txt'    => 'md5'
-  }.freeze
+
 
   def fetch_source(source, workspace, application, method)
     case "#{application}_#{method}"
@@ -128,23 +123,40 @@ TodoRunner.define do
     end
   end
 
-  def verify path, application, method
-    # TODO: make manifest & algorithm configurable? allow user to pass manifest path?
-    # Passing in manifest path; would allow us to set aside the manifest from the
-    # first verify and use it to validate the data on post zip verification.
+  MANIFEST_MAP = {
+    'manifest-sha1.txt'   => 'sha1',
+    'manifest-sha256.txt' => 'sha256',
+    'manifest-sha384.txt' => 'sha384',
+    'manifest-sha512.txt' => 'sha512',
+    'manifest-md5.txt'    => 'md5'
+  }.freeze
+  ##
+  # Look in +path+ for the expected types of OPenn manifest (found in
+  # {MANIFEST_MAP}).
+  #
+  # == Example:
+  #
+  #   find_openn_manifests('/path/to/W745') # => { 'manifest-md5.txt' => 'md5' }
+  #
+  # @param path [String] path to the fetched OPenn object
+  # @return [Hash]
+  def find_openn_manifests(path)
+    configs = {} # found pairs of manifests and algorithms
+    Dir.chdir(path) do
+      configs = MANIFEST_MAP.select { |manifest, _| File.file?(manifest) }
+    end
+    return configs
+  end
+
+  def verify(path, application, method)
     valid = true
     case "#{application}_#{method}"
     when 'bulwark_gitannex'
       # TODO: fill this in
     when 'openn_rsync'
-      message_io = STDOUT
-      Dir.chdir(path) do
-        MANIFEST_MAP.each do |manifest, algorithm|
-          if File.file?(manifest)
-            LOGGER.info("Validating manifest #{File.join path, manifest}")
-            valid &&= ManifestValidation::validate_manifest(manifest, algorithm, message_io: message_io)
-          end
-        end
+      manifest_configs = find_openn_manifests(path)
+      manifest_configs.each do |manifest, algorithm|
+        valid &&= verify_manifest(path, manifest, algorithm)
       end
       LOGGER.info("Manifest validation result for #{path}: #{valid}")
     else
@@ -152,6 +164,39 @@ TodoRunner.define do
     end
 
     return valid
+  end
+
+  ##
+  # Change to directory +package_directory+, and validate its contents using
+  # +manifest+ and +algorithm+.
+  #
+  # Manifest must be in the following format, with paths to the files to check
+  # *relative* to the package directory.
+  #
+  #     4442df919c38bb1a180c9aae4250ce22 data/W.745/sap/W745_000001_sap.jpg
+  #     ce5a9ec44b527093a1c694c070549984 data/W.745/master/W745_000001_1200.tif
+  #     8b8e816cf55cae00f3410353d0b88e26 data/metadata.xml
+  #     a645f8f04dc7dc7b9112fa0244a81a3f data/W.745/300/W745_000001_300.tif
+  #     c475516ef7787384cc4cb595f6d3c97a data/W.745/thumb/W745_000001_thumb.jpg
+  #
+  # IMPORTANT: Note that this method uses +Dir.chdir+ to switch to
+  # +package_directory+ and performs the check in that context. The manifest
+  # paths must be relative to it. The path to +manifest+ may be absolute or,
+  # <i>if the manifest is in the package directory</i>, relative to the
+  # +package_directory+.
+  #
+  # @param package_directory [String] path to the fetched source
+  # @param manifest [String] path to the checksum manifest
+  # @param algorithm [String] algorithm to use check +package_directory+ contents
+  # @return [Boolean] true if the whole manifest passes
+  def verify_manifest(package_directory, manifest, algorithm)
+    valid = true
+    message_io = STDOUT
+    Dir.chdir(package_directory) do
+      LOGGER.info("Validating manifest #{manifest}")
+      valid = Checksum::validate_manifest(manifest, algorithm, message_io: message_io)
+    end
+    valid
   end
 
   def zip_package(manifest_data)
@@ -202,6 +247,15 @@ TodoRunner.define do
     end
   end
 
+  def update_glacier_description(manifest_data, value_hash = {})
+    return manifest_data if value_hash.empty?
+
+    glacier_description = JSON.parse(manifest_data[:glacier_description])
+    glacier_description.update(value_hash)
+    manifest_data[:glacier_description] = glacier_description.to_json
+    manifest_data
+  end
+
   def git_annex_drop(path)
     Dir.chdir(path) do
       `git annex drop --all --force`
@@ -236,7 +290,7 @@ TodoRunner.define do
 
       # save the directory to zip to the todo file (used in next step)
       data[:fetched_source] = fetched_source
-      todo_file.rewrite data.to_yaml
+      todo_file.rewrite(data.to_yaml)
       true
     rescue Exception => ex
       LOGGER.fatal("ERROR: #{ex.message}")
@@ -254,6 +308,7 @@ TodoRunner.define do
       else
         LOGGER.error("Verification failure: #{data[:fetched_source]}")
       end
+      # TODO: if data[:verify_zip_content], retain manifest
       valid
     rescue Exception => ex
       LOGGER.fatal("ERROR: #{ex.message}")
@@ -261,12 +316,18 @@ TodoRunner.define do
     end
   end
 
+  zip_checksum_algorithm = 'sha256'
+
   task :zip, on_fail: :FAIL, next_step: :verify_zip do |todo_file|
     begin
       data = YAML.load todo_file
       LOGGER.info("Assembling archive for #{data[:todo_base]}...")
       zip_package(data)
       LOGGER.info('Archive assembled.')
+      checksum = Checksum.get_checksum(data[:compressed_destination], zip_checksum_algorithm)
+      LOGGER.info("Zip checksum: #{checksum}")
+      update_glacier_description(data, {zip_checksum: checksum, zip_checksum_algorithm: zip_checksum_algorithm})
+      todo_file.rewrite(data.to_yaml)
       true
     rescue Exception => ex
       LOGGER.fatal("ERROR: #{ex.message}")
@@ -275,6 +336,31 @@ TodoRunner.define do
   end
 
   task :verify_zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
+    # TODO: namespace checking
+    # TODO: if data[:verify_zip_content], use saved manifest to verify
+    # TODO: add verify location to guardian.secrets
+    # TODO: add data[:verify_zip_content], to guardian.secrets
+    # TODO: if we verify, record in todo_file metadata to be sent to Glacier
+    # Let's try unzipping
+    data = YAML.load todo_file
+    LOGGER.info("Verifying zipped archive for #{data[:todo_base]}")
+
+    dest = data[:fetched_source]
+    raise "Refusing to unzip to existing directory: #{dest}" if File.exist?(dest)
+    Dir.mkdir(dest)
+
+    # adapted from https://stackoverflow.com/a/19754884
+    Zip::File.open(data[:compressed_destination]) do |zip_file|
+      zip_file.each do |f|
+        full_path = File.join(dest, f.name)
+        LOGGER.debug("Extracting #{f.name} to #{full_path}")
+        FileUtils.mkdir_p(File.dirname(full_path))
+        zip_file.extract(f, full_path) unless File.exist?(full_path)
+      end
+    end
+
+
+
     LOGGER.error("ERROR: intentionally failing test job")
     false
   end

@@ -1,6 +1,6 @@
 require 'digest'
 
-module ManifestValidation
+module Checksum
   extend self
 
   # 64KB block size
@@ -46,7 +46,7 @@ module ManifestValidation
         next
       end
 
-      if validate checksum, path, algorithm, blocksize: blocksize
+      if validate_file checksum, path, algorithm, blocksize: blocksize
         message_io.puts "#{path}: OK" unless message_io.nil?
       else
         message_io.puts "#{path}: FAIL" unless message_io.nil?
@@ -65,7 +65,7 @@ module ManifestValidation
   #                           'sha1', 'sha256', 'sha384', 'sha512', 'md5'
   # @param blocksize [Long,Integer] blocksize for reading
   # @return [Boolean] +true+ file's checksum matches checksum param
-  def validate checksum, file_or_io, algorithm, blocksize: DEFAULT_BLOCK_SIZE
+  def validate_file checksum, file_or_io, algorithm, blocksize: DEFAULT_BLOCK_SIZE
     file_checksum = get_checksum file_or_io, algorithm, blocksize: blocksize
 
     checksum == file_checksum
