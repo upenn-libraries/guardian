@@ -310,8 +310,8 @@ TodoRunner.define do
     return configs
   end
 
-  # TODO: Make this job specific; this is too dangerous now.
   def remove_zip_artifacts(todo_data)
+    # TODO: Make sure data[:workspace] is deleted
     Dir.glob("#{todo_data[:workspace]}/*") do |path|
       git_annex_drop(path) if todo_data[:method] == 'gitannex' && File.extname(path) == '.git'
       FileUtils.rm_rf(path, :secure => true)
@@ -410,12 +410,8 @@ TodoRunner.define do
   end
 
   task :verify_zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
-    # TODO: namespace checking
-    # TODO: if data[:verify_zip_content], use saved manifest to verify_fetch
-    # TODO: add verify_fetch location to guardian.secrets
-    # TODO: add data[:verify_zip_content], to guardian.secrets
-    # TODO: if we verify_fetch, record in todo_file metadata to be sent to Glacier
-    # Let's try unzipping
+    # TODO: add data[:verify_zip_location], to guardian.secrets
+
     data = YAML.load todo_file
     LOGGER.info("Verifying zipped archive for #{data[:todo_base]}")
 
@@ -443,7 +439,6 @@ TodoRunner.define do
       update_fort_db(transfer_values, data[:glacier_vault])
       LOGGER.info('Database updated.')
       LOGGER.info('Removing zip artifacts...')
-      # TODO: Make sure data[:workspace] is deleted
       remove_zip_artifacts(data)
       LOGGER.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
