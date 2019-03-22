@@ -129,7 +129,9 @@ TodoRunner.define do
   end
 
   def verify path, application, method
-    # TODO: make manifest & algorithm configurable? allow user to pass manifest path
+    # TODO: make manifest & algorithm configurable? allow user to pass manifest path?
+    # Passing in manifest path; would allow us to set aside the manifest from the
+    # first verify and use it to validate the data on post zip verification.
     valid = true
     case "#{application}_#{method}"
     when 'bulwark_gitannex'
