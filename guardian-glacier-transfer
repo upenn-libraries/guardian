@@ -30,9 +30,16 @@ end
 # Copied from https://github.com/rubyzip/rubyzip
 
 class ZipFileGenerator
-  def initialize(input_dir, output_file)
+  attr_writer :remove_files
+
+  def initialize(input_dir, output_file, remove_files: false)
     @input_dir = input_dir
     @output_file = output_file
+    @remove_files = remove_files
+  end
+
+  def remove_files?
+    @remove_files
   end
 
   def write
@@ -40,6 +47,7 @@ class ZipFileGenerator
     ::Zip::File.open(@output_file, ::Zip::File::CREATE) do |zipfile|
       write_entries entries, '', zipfile
     end
+    Dir.rmdir @input_dir if remove_files?
   end
 
   private
@@ -52,8 +60,10 @@ class ZipFileGenerator
 
       if File.directory? disk_file_path
         recursively_deflate_directory(disk_file_path, zipfile, zipfile_path)
+        Dir.rmdir(disk_file_path) if remove_files?
       else
         put_into_archive(disk_file_path, zipfile, zipfile_path)
+        File.delete(disk_file_path) if remove_files?
       end
     end
   end
@@ -144,6 +154,7 @@ TodoRunner.define do
 
   def zip_package(manifest_data)
     zip_package = ZipFileGenerator.new(manifest_data[:fetched_source], manifest_data[:compressed_destination])
+    zip_package.remove_files = true
     zip_package.write
     true
   end
