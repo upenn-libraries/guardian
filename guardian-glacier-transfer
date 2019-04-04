@@ -105,7 +105,6 @@ TodoRunner.define do
   end
 
   def fetch_source(source, workspace, application, method)
-    # TODO: data[:workspace] will be unique directory for each todo; create it
     case "#{application}_#{method}"
       when 'bulwark_gitannex'
         bg_secrets = SecretsManager.load_secrets('secrets/bulwark_gitannex.secret')
@@ -134,13 +133,6 @@ TodoRunner.define do
     end
   end
 
-  def zip_package(todo_data)
-    zip_package = ZipFileGenerator.new(todo_data[:fetched_source], todo_data[:compressed_destination])
-    zip_package.remove_files = true
-    zip_package.write
-    true
-  end
-
   def verify_fetch(todo_data)
     valid = true
 
@@ -165,8 +157,17 @@ TodoRunner.define do
     return valid
   end
 
+
+  def zip_package(todo_data)
+    zip_package = ZipFileGenerator.new(todo_data[:fetched_source], todo_data[:compressed_destination])
+    zip_package.remove_files = true
+    zip_package.write
+    true
+  end
+
   def verify_zip(todo_data)
-    return true unless todo_data[:verify_zip_content]
+    return true unless verify?(todo_data[:verify_compressed_archive])
+
     raise "Cannot verify zip content data in 'todo_data[:manifest_data]'" if (todo_data[:manifest_data] || []).empty?
 
     valid = true
@@ -244,6 +245,10 @@ TodoRunner.define do
     valid
   end
 
+  def verify?(value)
+    value.to_s.strip.downcase == 'true'
+  end
+
   def validate_transfer_data(todo_data)
     %i{ compressed_destination glacier_description glacier_vault }.each do |key|
       raise ArgumentError, "Required transfer value not present #{key.inspect}: " \
@@ -311,10 +316,15 @@ TodoRunner.define do
   end
 
   def remove_zip_artifacts(todo_data)
+    return if todo_data[:cleanup_directories].nil?
     # TODO: Make sure data[:workspace] is deleted
-    Dir.glob("#{todo_data[:workspace]}/*") do |path|
-      git_annex_drop(path) if todo_data[:method] == 'gitannex' && File.extname(path) == '.git'
-      FileUtils.rm_rf(path, :secure => true)
+    todo_data[:cleanup_directories].split('|').each do |dir|
+      next unless File.exist?(dir)
+      Dir.glob("#{dir}/*") do |path|
+        git_annex_drop(path) if todo_data[:method] == 'gitannex' && File.extname(path) == '.git'
+        FileUtils.rm_rf(path, :secure => true)
+      end
+      FileUtils.rmdir(dir)
     end
   end
 
@@ -355,10 +365,9 @@ TodoRunner.define do
   task :fetch_source, on_fail: :FAIL, next_step: :verify_fetch do |todo_file|
     begin
       data = YAML.load todo_file
-      LOGGER.info("Creating workspace for #{data[:todo_base]} (#{data[:workspace]}")
+      LOGGER.info("Creating workspace for #{data[:todo_base]}: '#{data[:workspace]}'")
       prep_workspace(data)
       LOGGER.info("Fetching archive for #{data[:todo_base]}...")
-      # def fetch_source(source, workspace, application, method)
       fetched_source = fetch_source(data[:source], data[:workspace], data[:application], data[:method])
 
       # save the directory to zip to the todo file (used in next step)
@@ -410,23 +419,31 @@ TodoRunner.define do
   end
 
   task :verify_zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
-    # TODO: add data[:verify_zip_location], to guardian.secrets
+    begin
+      data = YAML.load todo_file
+      LOGGER.info("Verifying zipped archive for #{data[:todo_base]}")
 
-    data = YAML.load todo_file
-    LOGGER.info("Verifying zipped archive for #{data[:todo_base]}")
+      if verify?(data[:verify_compressed_archive])
+        valid = verify_zip(data)
 
-    valid = verify_zip(data)
+        if valid
+          LOGGER.info("Verified zip contents for #{data[:todo_base]}")
+          update_glacier_description(data, { archive_contents_verified: true })
+          todo_file.rewrite(data.to_yaml)
+        else
+          LOGGER.error("Invalid contents found in zip for #{data[:todo_base]}")
+        end
+        # implicitly return zip validity
+        valid
+      else
+        # we're not verifying; just continue
+        true
+      end
 
-    if valid
-      LOGGER.info("Verified zip contents for #{data[:todo_base]}")
-      update_glacier_description(data, { archive_contents_verified: true })
-      todo_file.rewrite(data.to_yaml)
-    else
-      LOGGER.error("Invalid contents found in zip for #{data[:todo_base]}")
+    rescue Exception => ex
+      LOGGER.fatal("ERROR: #{ex.message}")
+      false
     end
-
-    LOGGER.error("ERROR: intentionally failing test job")
-    false
   end
 
 
