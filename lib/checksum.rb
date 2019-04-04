@@ -1,5 +1,8 @@
 require 'digest'
 
+##
+# Utility module to validate generate file checksums, validate a file against
+# a checksum, or validate an entire manifest.
 module Checksum
   extend self
 
