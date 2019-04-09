@@ -419,9 +419,8 @@ TodoRunner.define do
       validate_todo_data(data)
       true
     rescue Exception => ex
-      handle_execption(ex)
-      # LOGGER.fatal("ERROR: #{ex.message}")
-      # LOGGER.debug(ex.backtrace)
+      LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
       false
     end
   end
