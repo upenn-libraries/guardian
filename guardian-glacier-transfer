@@ -6,12 +6,14 @@ require 'logger'
 require 'stronghold'
 require 'todo_runner'
 require 'yaml'
+require 'json'
 require 'zip'
 require 'rsync'
 require 'shellwords'
 
 require_relative('lib/secrets_manager')
 require_relative('lib/chunk_sizer')
+require_relative('lib/checksum')
 
 ##
 # Monkey patching Rsync::Result to get useful error messages.
@@ -29,9 +31,16 @@ end
 # Copied from https://github.com/rubyzip/rubyzip
 
 class ZipFileGenerator
-  def initialize(input_dir, output_file)
+  attr_writer :remove_files
+
+  def initialize(input_dir, output_file, remove_files: false)
     @input_dir = input_dir
     @output_file = output_file
+    @remove_files = remove_files
+  end
+
+  def remove_files?
+    @remove_files
   end
 
   def write
@@ -39,6 +48,7 @@ class ZipFileGenerator
     ::Zip::File.open(@output_file, ::Zip::File::CREATE) do |zipfile|
       write_entries entries, '', zipfile
     end
+    Dir.rmdir @input_dir if remove_files?
   end
 
   private
@@ -51,8 +61,10 @@ class ZipFileGenerator
 
       if File.directory? disk_file_path
         recursively_deflate_directory(disk_file_path, zipfile, zipfile_path)
+        Dir.rmdir(disk_file_path) if remove_files?
       else
         put_into_archive(disk_file_path, zipfile, zipfile_path)
+        File.delete(disk_file_path) if remove_files?
       end
     end
   end
@@ -75,10 +87,21 @@ class GlacierArchive < ActiveRecord::Base
   has_many :table_relationship
 end
 
-logger = Logger.new(STDOUT)
-logger.level = Logger::INFO
+LOGGER = Logger.new(STDOUT)
+LOGGER.level = ENV['GUARDIAN_LOG_LEVEL'] || Logger::INFO
+
+ARCHIVE_CHECKSUM_ALGORITHM = 'sha256'
+
+REQUIRED_TODO_VALUES = %i{ todo_base source workspace compressed_destination glacier_description glacier_vault application method }
 
 TodoRunner.define do
+  def prep_workspace todo_data
+    workspace = todo_data[:workspace]
+    raise "Workspace already exists for #{todo_data} (#{workspace}" if File.exist?(workspace)
+
+    Dir.mkdir(workspace)
+    return workspace
+  end
 
   def fetch_source(source, workspace, application, method)
     case "#{application}_#{method}"
@@ -95,9 +118,10 @@ TodoRunner.define do
         return "#{workspace}/#{File.basename(source)}"
       when 'openn_rsync'
         rsync_opts  = "-rltDv --no-owner --no-group"
-        source_path = Shellwords.escape(source)
+        source_path =  source =~ %r{/$} ? source : "#{source}/"
         dest        = File.join(workspace, File.basename(source))
-        dest_path   = Shellwords.escape(dest)
+        Dir.mkdir(dest) unless File.exist?(dest)
+        dest_path   = Shellwords.escape("#{dest}/")
 
         result      = Rsync.run(source_path, dest_path, rsync_opts)
         raise "Fetch failure, method=openn_rsync: #{result.full_error}" unless result.success?
@@ -108,11 +132,171 @@ TodoRunner.define do
     end
   end
 
-  def zip_package(manifest_data)
-    directory_to_zip = fetch_source(manifest_data[:source], manifest_data[:workspace], manifest_data[:application], manifest_data[:method])
-    zip_package = ZipFileGenerator.new(directory_to_zip, manifest_data[:compressed_destination])
+  def verify_fetch(todo_data)
+    valid = true
+
+    path            = todo_data[:fetched_source]
+    application     = todo_data[:application]
+    method          = todo_data[:method]
+    case "#{application}_#{method}"
+    when 'bulwark_gitannex'
+      # TODO: fill this in
+    when 'openn_rsync'
+      manifest_configs = find_openn_manifests(path)
+      manifest_configs.each do |manifest_data|
+        valid &&= verify_manifest(path, manifest_data[:manifest], manifest_data[:algorithm])
+        (todo_data[:manifest_data] ||= []) << manifest_data
+      end
+      LOGGER.info("Manifest validation result for #{path}: #{valid}")
+
+    else
+      raise "Invalid application #{application} specified."
+    end
+
+    return valid
+  end
+
+
+  def zip_package(todo_data)
+    zip_package = ZipFileGenerator.new(todo_data[:fetched_source], todo_data[:compressed_destination])
+    zip_package.remove_files = true
     zip_package.write
     true
+  end
+
+  def verify_zip(todo_data)
+    return true unless verify_compressed_archive?(todo_data[:verify_compressed_archive])
+
+    raise "Cannot verify zip content data in 'todo_data[:manifest_data]'" if (todo_data[:manifest_data] || []).empty?
+
+    valid = true
+
+    application = todo_data[:application]
+    method      = todo_data[:method]
+    case "#{application}_#{method}"
+    when 'bulwark_gitannex'
+      # TODO: fill this in
+    when 'openn_rsync'
+      dest        = todo_data[:verification_destination]
+      archive     = todo_data[:compressed_destination]
+      unzip_archive(archive, dest)
+      Dir.chdir(dest) do
+        todo_data[:manifest_data].each do |hash|
+          manifest_valid = Checksum.validate_file(hash[:manifest_sha256], hash[:manifest], ARCHIVE_CHECKSUM_ALGORITHM)
+          if manifest_valid
+            valid &&= verify_manifest(dest, hash[:manifest], hash[:algorithm])
+          else
+            LOGGER.error("Decompressed manifest not valid for #{todo_data[:todo_base]} (#{hash[:manifest]})")
+            valid = false
+          end
+        end
+      end
+    end
+
+    return valid
+  end
+
+  def glacier_transfer(todo_data)
+    glacier_secrets = SecretsManager.load_secrets('secrets/glacier.secret')
+    SecretsManager.set(glacier_secrets)
+    validate_transfer_data todo_data
+    file_path           = todo_data[:compressed_destination]
+    archive_description = todo_data[:glacier_description]
+    vault_id            = todo_data[:glacier_vault]
+    chunk_size          = ChunkSizer.calculate(File.stat(file_path).size)
+    client              = Stronghold::Client.new(:multipart_chunk_size => chunk_size)
+    backup_ids = client.create_backup vault_id, file_path, archive_description
+    SecretsManager.unset(glacier_secrets)
+    return backup_ids
+  end
+
+  ##
+  # Change to directory +package_directory+, and validate its contents using
+  # +manifest+ and +algorithm+.
+  #
+  # Manifest must be in the following format, with paths to the files to check
+  # *relative to the package directory*.
+  #
+  #     4442df919c38bb1a180c9aae4250ce22 data/W.745/sap/W745_000001_sap.jpg
+  #     ce5a9ec44b527093a1c694c070549984 data/W.745/master/W745_000001_1200.tif
+  #     8b8e816cf55cae00f3410353d0b88e26 data/metadata.xml
+  #     a645f8f04dc7dc7b9112fa0244a81a3f data/W.745/300/W745_000001_300.tif
+  #     c475516ef7787384cc4cb595f6d3c97a data/W.745/thumb/W745_000001_thumb.jpg
+  #
+  # IMPORTANT: Note that this method uses +Dir.chdir+ to switch to
+  # +package_directory+ and performs the check in that context. The manifest
+  # paths must be relative to it. The path to +manifest+ may be absolute or,
+  # <i>if the manifest is in the package directory</i>, relative to the
+  # +package_directory+.
+  #
+  # @param package_directory [String] path to the fetched source
+  # @param manifest [String] path to the checksum manifest
+  # @param algorithm [String] algorithm to use check +package_directory+ contents
+  # @return [Boolean] true if the whole manifest passes
+  def verify_manifest(package_directory, manifest, algorithm)
+    valid = true
+    message_io = STDOUT
+    Dir.chdir(package_directory) do
+      LOGGER.info("Validating manifest #{manifest}")
+      valid = Checksum::validate_manifest(manifest, algorithm, message_io: message_io)
+    end
+    valid
+  end
+
+  def verify_compressed_archive?(value)
+    value.to_s.strip.downcase == 'true'
+  end
+
+  ##
+  # Validate the +todo_data+. Ensure that required values are present and that
+  # the +verify_compressed_archive+ and +verification_destination+ values are
+  # valid.
+  #
+  # Required values are:
+  #
+  #     :todo_base
+  #     :source
+  #     :workspace
+  #     :compressed_destination
+  #     :glacier_description
+  #     :glacier_vault
+  #     :application
+  #     :method
+  #
+  # +verify_compressed_archive+ value must be blank (+nil+ or +''+), +false+,
+  # or +true+. If +verify_compressed_archive+ is +true+,
+  # +verification_destination+ is required.
+  #
+  def validate_todo_data(todo_data)
+    ##----------------
+    ## Required values
+    ##----------------
+    required = %i{ todo_base
+                   source
+                   workspace
+                   compressed_destination
+                   glacier_description
+                   glacier_vault
+                   application
+                   method
+                }
+    missing = required.select { |key| todo_data[key].to_s.strip.empty? }.map(&:inspect)
+    raise "Required todo values missing: #{missing.join(', ')}" unless missing.empty?
+
+    ##------------------------------------
+    ## Verify compressed archived checking
+    ##------------------------------------
+    verify = todo_data[:verify_compressed_archive].to_s.strip.downcase
+    return if ['', 'false'].include?(verify) # No verification to do; end validation
+    # We have a non-false verify value; unless it's 'true', it's not a valid value.
+    raise ":verify_compressed_archive must be '', 'true'. or 'false'; got: '#{verify}'" unless verify == 'true'
+
+    # ':verify_compressed_archive' is true; make sure :verification_destination
+    # is defined.
+    if todo_data[:verification_destination].to_s.strip.empty?
+      raise "':verification_destination' must be supplied if ':verify_compressed_archive' is 'true'"
+    end
+
   end
 
   def validate_transfer_data(todo_data)
@@ -135,25 +319,73 @@ TodoRunner.define do
     end
   end
 
-  def glacier_transfer(todo_data)
-    glacier_secrets = SecretsManager.load_secrets('secrets/glacier.secret')
-    SecretsManager.set(glacier_secrets)
-    validate_transfer_data todo_data
-    file_path           = todo_data[:compressed_destination]
-    archive_description = todo_data[:glacier_description]
-    vault_id            = todo_data[:glacier_vault]
-    chunk_size          = ChunkSizer.calculate(File.stat(file_path).size)
-    client              = Stronghold::Client.new(:multipart_chunk_size => chunk_size)
-    backup_ids = client.create_backup vault_id, file_path, archive_description
-    SecretsManager.unset(glacier_secrets)
-    return backup_ids
+  def unzip_archive archive, dest,
+    unzip_dir = File.join(dest, File.basename(archive, File.extname(archive)))
+    raise "Refusing to unzip to existing directory: #{unzip_dir}" if File.exist?(unzip_dir)
+    Dir.mkdir(dest) unless File.exist?(dest)
+
+    # adapted from https://stackoverflow.com/a/19754884
+    Zip::File.open(archive) do |zip_file|
+      zip_file.each do |f|
+        full_path = File.join(dest, f.name)
+        LOGGER.debug("Extracting #{f.name} to #{full_path}")
+        FileUtils.mkdir_p(File.dirname(full_path))
+        zip_file.extract(f, full_path) unless File.exist?(full_path)
+      end
+    end
+  end
+
+  MANIFEST_MAP = {
+    'manifest-sha1.txt'   => 'sha1',
+    'manifest-sha256.txt' => 'sha256',
+    'manifest-sha384.txt' => 'sha384',
+    'manifest-sha512.txt' => 'sha512',
+    'manifest-md5.txt'    => 'md5'
+  }.freeze
+
+  ##
+  # Look in +path+ for the expected types of OPenn manifest (found in
+  # {MANIFEST_MAP}).
+  #
+  # == Example:
+  #
+  #   find_openn_manifests('/path/to/W745') # => { 'manifest-md5.txt' => 'md5' }
+  #
+  # @param path [String] path to the fetched OPenn object
+  # @return [Hash]
+  def find_openn_manifests(path)
+    configs = [] # found pairs of manifests and algorithms
+    Dir.chdir(path) do
+      MANIFEST_MAP.each do |manifest, algorithm|
+        if File.file?(manifest)
+          manifest_sha256 = Checksum.get_checksum(manifest, 'sha256')
+          configs << { manifest: manifest, algorithm: algorithm, manifest_sha256: manifest_sha256 }
+        end
+      end
+    end
+    return configs
   end
 
   def remove_zip_artifacts(todo_data)
-    Dir.glob("#{todo_data[:workspace]}/*") do |path|
-      git_annex_drop(path) if todo_data[:method] == 'gitannex' && File.extname(path) == '.git'
-      FileUtils.rm_rf(path, :secure => true)
+    return if todo_data[:cleanup_directories].nil?
+    # TODO: Make sure data[:workspace] is deleted
+    todo_data[:cleanup_directories].split('|').each do |dir|
+      next unless File.exist?(dir)
+      Dir.glob("#{dir}/*") do |path|
+        git_annex_drop(path) if todo_data[:method] == 'gitannex' && File.extname(path) == '.git'
+        FileUtils.rm_rf(path, :secure => true)
+      end
+      FileUtils.rmdir(dir)
     end
+  end
+
+  def update_glacier_description(manifest_data, value_hash = {})
+    return manifest_data if value_hash.empty?
+
+    glacier_description = JSON.parse(manifest_data[:glacier_description])
+    glacier_description.update(value_hash)
+    manifest_data[:glacier_description] = glacier_description.to_json
+    manifest_data
   end
 
   def git_annex_drop(path)
@@ -179,43 +411,131 @@ TodoRunner.define do
 
   guardian = SecretsManager.load_secrets('secrets/guardian.secret')
 
-  start :zip
+  start :validate_todo_file
 
-  task :zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
+  task :validate_todo_file, on_fail: :FAIL, next_step: :fetch_source do |todo_file|
     begin
-      data = YAML.load todo_file
-      logger.info("Fetching and assembling archive for #{data[:todo_base]}...")
-      zip_package(data)
-      logger.info('Archive assembled.')
+      data = YAML.load_file todo_file
+      validate_todo_data(data)
       true
     rescue Exception => ex
-      logger.fatal("ERROR: #{ex.message}")
+      LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
       false
     end
   end
 
+  task :fetch_source, on_fail: :FAIL, next_step: :verify_fetch do |todo_file|
+    begin
+      data = YAML.load todo_file
+      LOGGER.info("Creating workspace for #{data[:todo_base]}: '#{data[:workspace]}'")
+      prep_workspace(data)
+      LOGGER.info("Fetching archive for #{data[:todo_base]}...")
+      fetched_source = fetch_source(data[:source], data[:workspace], data[:application], data[:method])
+
+      # save the directory to zip to the todo file (used in next step)
+      data[:fetched_source] = fetched_source
+      todo_file.rewrite(data.to_yaml)
+      true
+    rescue Exception => ex
+      LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
+      false
+    end
+  end
+
+  task :verify_fetch, on_fail: :FAIL, next_step: :zip do |todo_file|
+    begin
+      data = YAML.load todo_file
+      LOGGER.info("Verifying fetched data for #{data[:todo_base]}...")
+      valid = verify_fetch(data)
+      if valid
+        LOGGER.info("Fetched data verified :#{data[:fetched_source]}")
+      else
+        LOGGER.error("Verification failure: #{data[:fetched_source]}")
+     end
+
+      # if we've added manifest_data, rewrite the todo file
+      todo_file.rewrite(data.to_yaml) unless (data[:manifest_data] || []).empty?
+
+      valid
+    rescue Exception => ex
+      LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
+      false
+    end
+  end
+
+  task :zip, on_fail: :FAIL, next_step: :verify_zip do |todo_file|
+    begin
+      data = YAML.load todo_file
+      LOGGER.info("Assembling archive for #{data[:todo_base]}...")
+      zip_package(data)
+      LOGGER.info('Archive assembled.')
+      checksum = Checksum.get_checksum(data[:compressed_destination], ARCHIVE_CHECKSUM_ALGORITHM)
+      LOGGER.info("Zip checksum: #{checksum}")
+      update_glacier_description(data, {archive_checksum: checksum, archive_checksum_algorithm: ARCHIVE_CHECKSUM_ALGORITHM})
+      todo_file.rewrite(data.to_yaml)
+      true
+    rescue Exception => ex
+      LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
+      false
+    end
+  end
+
+  task :verify_zip, on_fail: :FAIL, next_step: :glacier do |todo_file|
+    begin
+      data = YAML.load todo_file
+      LOGGER.info("Verifying zipped archive for #{data[:todo_base]}")
+
+      if verify_compressed_archive?(data[:verify_compressed_archive])
+        valid = verify_zip(data)
+
+        if valid
+          LOGGER.info("Verified zip contents for #{data[:todo_base]}")
+          update_glacier_description(data, { archive_contents_verified: true })
+          todo_file.rewrite(data.to_yaml)
+        else
+          LOGGER.error("Invalid contents found in zip for #{data[:todo_base]}")
+        end
+        # implicitly return zip validity
+        valid
+      else
+        # we're not verifying; just continue
+        true
+      end
+    rescue Exception => ex
+      LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
+      false
+    end
+  end
+
+
   task :glacier, on_fail: :FAIL, next_step: :SUCCESS do |todo_file|
     begin
       data = load_data(todo_file)
-      logger.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
+      LOGGER.info("Initializing transfer to Glacier for #{data[:todo_base]}...")
       transfer_values  = glacier_transfer(data)
-      logger.info("Transfer complete.  Updating database with transfer information...")
+      LOGGER.info("Transfer complete.  Updating database with transfer information...")
       update_fort_db(transfer_values, data[:glacier_vault])
-      logger.info('Database updated.')
-      logger.info('Removing zip artifacts...')
+      LOGGER.info('Database updated.')
+      LOGGER.info('Removing zip artifacts...')
       remove_zip_artifacts(data)
-      logger.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
+      LOGGER.info("Artifacts removed.  Fetch and transfer of #{data[:todo_base]} complete.")
       true
     rescue Exception => ex
-      logger.fatal("ERROR: #{ex.message}")
+      LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
       false
     end
   end
 
 end
 
-logger.info('Todo Runner initialized, starting run...')
+LOGGER.info('Todo Runner initialized, starting run...')
 
 TodoRunner.run(*ARGV)
 
-logger.info('Run complete.')
+LOGGER.info('Run complete.')

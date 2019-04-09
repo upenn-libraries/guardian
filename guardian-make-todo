@@ -9,11 +9,19 @@ require 'smarter_csv'
 ## Create a todo file like this:
 #
 #     ---
-#     :source: ljsmisc1.git
-#     :zip_dest: dest_dir_for_zips
-#     :compressed_source: dest_dir_for_zips/ljsmisc1.zip
-#     :glacier_description: "{ json_blob: some_stuff }"
-#     :glacier_vault: bulwark
+#     :todo_base: directive_name_1
+#     :source: "/$DOCKER_PATH/directive_name_1"
+#     :workspace: workspace/directive_name_1
+#     :compressed_destination: zip-workspace/directive_name_1/directive_name_1.zip
+#     :verification_destination: verify-workspace/directive_name_1
+#     :cleanup_directories: workspace/directive_name_1|zip-workspace/directive_name_1|verify-workspace/directive_name_1
+#     :glacier_description: '{"owner":"katherly","description":"directive_name_1"}'
+#     :glacier_vault: vault_name
+#     :application: bulwark
+#     :method: gitannex
+#     :verify_compressed_archive: 'true'
+#
+#
 #
 #####
 
@@ -24,7 +32,7 @@ def validate_args!
   raise ArgumentError.new("#{ARGV[1]} not found") if File.directory?(ARGV[1]) == false
 end
 
-HEADERS = %i{ todo_base	source	workspace	compressed_destination	glacier_description	glacier_vault	application	method }
+HEADERS = %i{ todo_base source workspace compressed_destination verification_destination cleanup_directories glacier_description glacier_vault application method verify_compressed_archive }
 
 # Input columns are:
 # todo_base	source	zip_dest	compressed_source	glacier_description	glacier_vault

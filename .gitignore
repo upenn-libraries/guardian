@@ -9,7 +9,12 @@ todos/
 completion.txt
 scripts/list
 scripts/batch.sh
+tmp
 
 # Docker stuff
 secrets/*.secret
 .env
+
+# Yard artifacts
+doc/
+.yardoc/
