@@ -141,7 +141,7 @@ The YAML todo file keys are:
 - `:verify_compressed_archive` -- optional; 'true' if zip file contents should be verified
     - used by `:verify_zip` task
     
-**Data validation and checksumming**
+#### Data validation and checksumming
 
 When each zip archive is created the `:glacier_description` value is updated 
 with the SHA-256 checksum of the zipped archive. For example,
@@ -168,6 +168,10 @@ If the `#verify_zip` method returns `true`, the `:glacier_description` value is 
 ```
 
 NB: When an archive has been retrieved from Glacier, if the 'archive_checksum' is present **and** 'archive_contents_verified' is `true`, then the integrity of the archive content can be checked using the 'archive_checksum' and without having to verify the contents themselves. 
+
+#### Log level
+
+By default log level is set to `Logger::INFO`. To control the log level set the `GUARDIAN_LOG_LEVEL` environment variable to `DEBUG`, `INFO`, `WARN`, `ERROR`, or `FATAL`. 
 
 ## Contributing
 
