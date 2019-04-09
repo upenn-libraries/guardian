@@ -10,7 +10,6 @@ require 'json'
 require 'zip'
 require 'rsync'
 require 'shellwords'
-require 'tempfile'
 
 require_relative('lib/secrets_manager')
 require_relative('lib/chunk_sizer')
