@@ -89,11 +89,12 @@ The `guardian-glacier-transfer` script is a todo-runner that fetches, zips, and 
 
 The todo-runner tasks, in order, are:
 
-1. `:fetch_source` -- retrieve the source data specified in the todo-file
-2. `:verify_fetch`(*) -- if implemented, verify fetched data's content integrity
-3. `:zip` -- package source data in single zip file; store sha-256
-4. `:verify_zip`(*) -- if implement *and* requested, verify zipped archive content integrity
-5. `glacier` -- push to Glacier and record information in FortDB database
+1. `:validate_todo_file` -- confirm required fields are present and verification values are valid 
+2. `:fetch_source` -- retrieve the source data specified in the todo-file
+3. `:verify_fetch`(*) -- if implemented, verify fetched data's content integrity
+4. `:zip` -- package source data in single zip file; store sha-256
+5. `:verify_zip`(*) -- if implement *and* requested, verify zipped archive content integrity
+6. `glacier` -- push to Glacier and record information in FortDB database
 
 (*) This feature implemented only for OPenn-rsync packages. 
 
@@ -158,13 +159,13 @@ The `:verify_zip` task invokes the `#verify_zip` method when `:verify_compressed
 1. decompress the zipped archive to `:verification_destination`, and
 2. verify the decompressed content *such that the verified fetched and zip contents are confirmed to be identical*.
 
-If the `#verify_zip` method returns `true`, the `:glacier_description` value is updated noting the zip contents have been verified. For example,
+Important: If `:verify_compressed_archive` is `true`, then `verification_destination` **must** be provided; otherwise, the todo-file will fail validation.
+
+If the `#verify_zip` method returns `true`, the `:glacier_description` value is updated noting the zip contents have been verified. In the following description, `archive_contents_verified` has the value `true`.
                                             
 ```yaml
 :archive_description: '{"owner":"demery","repository":"Walters Art Museum","openn_repo_id":"0020","description":"W681","archive_checksum":"094b114a0d79f09e6be1c4c893e4e1076d9432ff3218eac16d82fa2f6c30ecb5","archive_checksum_algorithm":"sha256""archive_contents_verified":true}'
 ```
-
-Note that `archive_contents_verified` has the value `true`.
 
 NB: When an archive has been retrieved from Glacier, if the 'archive_checksum' is present **and** 'archive_contents_verified' is `true`, then the integrity of the archive content can be checked using the 'archive_checksum' and without having to verify the contents themselves. 
 

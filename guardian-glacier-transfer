@@ -93,9 +93,9 @@ LOGGER.level = ENV['GUARDIAN_LOG_LEVEL'] || Logger::INFO
 
 ARCHIVE_CHECKSUM_ALGORITHM = 'sha256'
 
+REQUIRED_TODO_VALUES = %i{ todo_base source workspace compressed_destination glacier_description glacier_vault application method }
+
 TodoRunner.define do
-
-
   def prep_workspace todo_data
     workspace = todo_data[:workspace]
     raise "Workspace already exists for #{todo_data} (#{workspace}" if File.exist?(workspace)
@@ -166,20 +166,19 @@ TodoRunner.define do
   end
 
   def verify_zip(todo_data)
-    return true unless verify?(todo_data[:verify_compressed_archive])
+    return true unless verify_compressed_archive?(todo_data[:verify_compressed_archive])
 
     raise "Cannot verify zip content data in 'todo_data[:manifest_data]'" if (todo_data[:manifest_data] || []).empty?
 
     valid = true
 
-    # TODO: Change dest to todo_data[:verify_zip_location] or similar
     application = todo_data[:application]
     method      = todo_data[:method]
     case "#{application}_#{method}"
     when 'bulwark_gitannex'
       # TODO: fill this in
     when 'openn_rsync'
-      dest        = todo_data[:fetched_source]
+      dest        = todo_data[:verification_destination]
       archive     = todo_data[:compressed_destination]
       unzip_archive(archive, dest)
       Dir.chdir(dest) do
@@ -217,7 +216,7 @@ TodoRunner.define do
   # +manifest+ and +algorithm+.
   #
   # Manifest must be in the following format, with paths to the files to check
-  # *relative* to the package directory.
+  # *relative to the package directory*.
   #
   #     4442df919c38bb1a180c9aae4250ce22 data/W.745/sap/W745_000001_sap.jpg
   #     ce5a9ec44b527093a1c694c070549984 data/W.745/master/W745_000001_1200.tif
@@ -245,8 +244,60 @@ TodoRunner.define do
     valid
   end
 
-  def verify?(value)
+  def verify_compressed_archive?(value)
     value.to_s.strip.downcase == 'true'
+  end
+
+  ##
+  # Validate the +todo_data+. Ensure that required values are present and that
+  # the +verify_compressed_archive+ and +verification_destination+ values are
+  # valid.
+  #
+  # Required values are:
+  #
+  #     :todo_base
+  #     :source
+  #     :workspace
+  #     :compressed_destination
+  #     :glacier_description
+  #     :glacier_vault
+  #     :application
+  #     :method
+  #
+  # +verify_compressed_archive+ value must be blank (+nil+ or +''+), +false+,
+  # or +true+. If +verify_compressed_archive+ is +true+,
+  # +verification_destination+ is required.
+  #
+  def validate_todo_data(todo_data)
+    ##----------------
+    ## Required values
+    ##----------------
+    required = %i{ todo_base
+                   source
+                   workspace
+                   compressed_destination
+                   glacier_description
+                   glacier_vault
+                   application
+                   method
+                }
+    missing = required.select { |key| todo_data[key].to_s.strip.empty? }.map(&:inspect)
+    raise "Required todo values missing: #{missing.join(', ')}" unless missing.empty?
+
+    ##------------------------------------
+    ## Verify compressed archived checking
+    ##------------------------------------
+    verify = todo_data[:verify_compressed_archive].to_s.strip.downcase
+    return if ['', 'false'].include?(verify) # No verification to do; end validation
+    # We have a non-false verify value; unless it's 'true', it's not a valid value.
+    raise ":verify_compressed_archive must be '', 'true'. or 'false'; got: '#{verify}'" unless verify == 'true'
+
+    # ':verify_compressed_archive' is true; make sure :verification_destination
+    # is defined.
+    if todo_data[:verification_destination].to_s.strip.empty?
+      raise "':verification_destination' must be supplied if ':verify_compressed_archive' is 'true'"
+    end
+
   end
 
   def validate_transfer_data(todo_data)
@@ -269,9 +320,10 @@ TodoRunner.define do
     end
   end
 
-  def unzip_archive archive, dest
-    raise "Refusing to unzip to existing directory: #{dest}" if File.exist?(dest)
-    Dir.mkdir(dest)
+  def unzip_archive archive, dest,
+    unzip_dir = File.join(dest, File.basename(archive, File.extname(archive)))
+    raise "Refusing to unzip to existing directory: #{unzip_dir}" if File.exist?(unzip_dir)
+    Dir.mkdir(dest) unless File.exist?(dest)
 
     # adapted from https://stackoverflow.com/a/19754884
     Zip::File.open(archive) do |zip_file|
@@ -360,7 +412,20 @@ TodoRunner.define do
 
   guardian = SecretsManager.load_secrets('secrets/guardian.secret')
 
-  start :fetch_source
+  start :validate_todo_file
+
+  task :validate_todo_file, on_fail: :FAIL, next_step: :fetch_source do |todo_file|
+    begin
+      data = YAML.load_file todo_file
+      validate_todo_data(data)
+      true
+    rescue Exception => ex
+      handle_execption(ex)
+      # LOGGER.fatal("ERROR: #{ex.message}")
+      # LOGGER.debug(ex.backtrace)
+      false
+    end
+  end
 
   task :fetch_source, on_fail: :FAIL, next_step: :verify_fetch do |todo_file|
     begin
@@ -376,6 +441,7 @@ TodoRunner.define do
       true
     rescue Exception => ex
       LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
       false
     end
   end
@@ -389,7 +455,7 @@ TodoRunner.define do
         LOGGER.info("Fetched data verified :#{data[:fetched_source]}")
       else
         LOGGER.error("Verification failure: #{data[:fetched_source]}")
-      end
+     end
 
       # if we've added manifest_data, rewrite the todo file
       todo_file.rewrite(data.to_yaml) unless (data[:manifest_data] || []).empty?
@@ -397,6 +463,7 @@ TodoRunner.define do
       valid
     rescue Exception => ex
       LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
       false
     end
   end
@@ -414,6 +481,7 @@ TodoRunner.define do
       true
     rescue Exception => ex
       LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
       false
     end
   end
@@ -423,7 +491,7 @@ TodoRunner.define do
       data = YAML.load todo_file
       LOGGER.info("Verifying zipped archive for #{data[:todo_base]}")
 
-      if verify?(data[:verify_compressed_archive])
+      if verify_compressed_archive?(data[:verify_compressed_archive])
         valid = verify_zip(data)
 
         if valid
@@ -439,9 +507,9 @@ TodoRunner.define do
         # we're not verifying; just continue
         true
       end
-
     rescue Exception => ex
       LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
       false
     end
   end
@@ -461,6 +529,7 @@ TodoRunner.define do
       true
     rescue Exception => ex
       LOGGER.fatal("ERROR: #{ex.message}")
+      LOGGER.debug(ex.backtrace.map { |s| "\tfrom #{s}" }.join("\n"))
       false
     end
   end
