@@ -61,10 +61,16 @@ class ZipFileGenerator
 
       if File.directory? disk_file_path
         recursively_deflate_directory(disk_file_path, zipfile, zipfile_path)
-        Dir.rmdir(disk_file_path) if remove_files?
+        if remove_files?
+          FileUtils.chmod_R 0755, disk_file_path
+          Dir.rmdir(disk_file_path) #if remove_files?
+        end
       else
         put_into_archive(disk_file_path, zipfile, zipfile_path)
-        File.delete(disk_file_path) if remove_files?
+        if remove_files?
+          FileUtils.chmod 0755, disk_file_path
+          File.delete(disk_file_path) # if remove_files?
+        end
       end
     end
   end
@@ -105,7 +111,7 @@ TodoRunner.define do
 
   def fetch_source(source, workspace, application, method)
     case "#{application}_#{method}"
-      when 'bulwark_gitannex'
+    when 'bulwark_gitannex'
         bg_secrets = SecretsManager.load_secrets('secrets/bulwark_gitannex.secret')
         SecretsManager.set(bg_secrets)
         `git clone #{source} #{workspace}/#{File.basename(source)}`
@@ -124,7 +130,7 @@ TodoRunner.define do
         dest_path   = Shellwords.escape("#{dest}/")
 
         result      = Rsync.run(source_path, dest_path, rsync_opts)
-        raise "Fetch failure, method=openn_rsync: #{result.full_error}" unless result.success?
+        raise " failure, method=openn_rsync: #{result.full_error}" unless result.success?
 
         return dest
       else
@@ -140,7 +146,12 @@ TodoRunner.define do
     method          = todo_data[:method]
     case "#{application}_#{method}"
     when 'bulwark_gitannex'
-      # TODO: fill this in
+      pwd = FileUtils.pwd
+      FileUtils.cd(path, :verbose => true)
+      stacktrace = `git annex fsck --fast --from ceph01`
+      FileUtils.cd(pwd, :verbose => true)
+      raise "Fetch failed for #{application} for #{path}" if stacktrace.include?('fail')
+      valid = true if stacktrace.end_with?("ok\n(recording state in git...)\n")
     when 'openn_rsync'
       manifest_configs = find_openn_manifests(path)
       manifest_configs.each do |manifest_data|
@@ -159,7 +170,7 @@ TodoRunner.define do
 
   def zip_package(todo_data)
     zip_package = ZipFileGenerator.new(todo_data[:fetched_source], todo_data[:compressed_destination])
-    zip_package.remove_files = true
+    #zip_package.remove_files = true
     zip_package.write
     true
   end
@@ -167,16 +178,23 @@ TodoRunner.define do
   def verify_zip(todo_data)
     return true unless verify_compressed_archive?(todo_data[:verify_compressed_archive])
 
-    raise "Cannot verify zip content data in 'todo_data[:manifest_data]'" if (todo_data[:manifest_data] || []).empty?
-
     valid = true
 
     application = todo_data[:application]
     method      = todo_data[:method]
     case "#{application}_#{method}"
     when 'bulwark_gitannex'
-      # TODO: fill this in
+      dest        = todo_data[:verification_destination]
+      archive     = todo_data[:compressed_destination]
+      unzip_archive(archive, dest)
+      Dir.chdir(dest) do
+        stacktrace = `git annex fsck --fast --from ceph01`
+        raise "Fetch failed for #{application} for #{path}" if stacktrace.include?('fail')
+        valid = true if stacktrace.end_with?("ok\n(recording state in git...)\n")
+      end
     when 'openn_rsync'
+      raise "Cannot verify zip content data in #{todo_data[:manifest_data]}" if (todo_data[:manifest_data] || []).empty?
+
       dest        = todo_data[:verification_destination]
       archive     = todo_data[:compressed_destination]
       unzip_archive(archive, dest)
@@ -381,7 +399,6 @@ TodoRunner.define do
 
   def update_glacier_description(manifest_data, value_hash = {})
     return manifest_data if value_hash.empty?
-
     glacier_description = JSON.parse(manifest_data[:glacier_description])
     glacier_description.update(value_hash)
     manifest_data[:glacier_description] = glacier_description.to_json
