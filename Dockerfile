@@ -18,6 +18,8 @@ WORKDIR /usr/src/app/
 
 RUN mkdir /usr/src/app/todos
 
+RUN gem install bundler
+
 RUN bundle install
 
 CMD ["bash", "-c", "while [ 1 ]; do sleep 10000; done"]
