@@ -10,6 +10,7 @@ gem 'todo_runner', git: 'https://github.com/upenn-libraries/todo_runner.git', br
 
 
 group :development do
+  gem 'rb-readline'
   gem 'pry', '~> 0.11.3'
   gem 'rspec'
 end
