@@ -170,7 +170,7 @@ TodoRunner.define do
 
   def zip_package(todo_data)
     zip_package = ZipFileGenerator.new(todo_data[:fetched_source], todo_data[:compressed_destination])
-    #zip_package.remove_files = true
+    zip_package.remove_files = true
     zip_package.write
     true
   end
