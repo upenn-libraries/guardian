@@ -2,7 +2,7 @@ Host colenda-dev.library.upenn.int
     Hostname colenda-dev.library.upenn.int
     IdentityFile ~/.ssh/bulwark_rsa
     IdentitiesOnly yes
-Host colenda-front.library.upenn.int
-    Hostname colenda-front.library.upenn.int
+Host colenda01.library.upenn.int
+    Hostname colenda01.library.upenn.int
     IdentityFile ~/.ssh/bulwark_rsa
     IdentitiesOnly yes
