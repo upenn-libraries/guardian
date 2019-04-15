@@ -389,10 +389,19 @@ TodoRunner.define do
     # TODO: Make sure data[:workspace] is deleted
     todo_data[:cleanup_directories].split('|').each do |dir|
       next unless File.exist?(dir)
+      LOGGER.debug("Processing for removal: #{dir}")
       (Dir.entries(dir) - %w(. ..)).each do |path|
-        git_annex_drop(path) if todo_data[:method] == 'gitannex' && File.extname(path) == '.git'
-        FileUtils.rm_rf(path, :secure => true)
+        LOGGER.debug("Removal entry is: #{path}")
+        if todo_data[:method] == 'gitannex' && File.extname(path) == '.git'
+          Dir.chdir(dir) do
+            git_annex_drop(path)
+          end
+        end
+        disk_file_path = File.join(dir, path)
+        LOGGER.debug("Removing: #{disk_file_path}")
+        FileUtils.rm_rf(disk_file_path, :secure => true)
       end
+      LOGGER.debug("Removing: #{dir}")
       FileUtils.rmdir(dir)
     end
   end
