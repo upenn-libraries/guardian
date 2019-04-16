@@ -1,6 +1,6 @@
 # README for `guardian`
 
-Guardian is a set of orchestration scripts for assembling objects into Glacier-ready packages, transferring to Glacier, and recording relevant Glacier information from successful transfers in a local database.
+Guardian is a set of orchestration tools for assembling objects into Glacier-ready packages, transferring to Glacier, and recording relevant Glacier information from successful transfers in a local database.
 
 ## Requirements
 
@@ -93,7 +93,7 @@ The todo-runner tasks, in order, are:
 2. `:fetch_source` -- retrieve the source data specified in the todo-file
 3. `:verify_fetch`(*) -- if implemented, verify fetched data's content integrity
 4. `:zip` -- package source data in single zip file; store sha-256
-5. `:verify_zip`(*) -- if implement *and* requested, verify zipped archive content integrity
+5. `:verify_zip`(*) -- if implemented *and* requested, verify zipped archive content integrity
 6. `glacier` -- push to Glacier and record information in FortDB database
 
 (*) This feature implemented only for OPenn-rsync packages. 
