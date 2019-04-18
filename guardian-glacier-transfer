@@ -31,6 +31,7 @@ end
 # Copied from https://github.com/rubyzip/rubyzip
 
 class ZipFileGenerator
+  Zip.write_zip64_support = true
   attr_writer :remove_files
 
   def initialize(input_dir, output_file, remove_files: false)
@@ -337,7 +338,8 @@ TodoRunner.define do
     end
   end
 
-  def unzip_archive archive, dest,
+  Zip.write_zip64_support = true
+  def unzip_archive archive, dest
     unzip_dir = File.join(dest, File.basename(archive, File.extname(archive)))
     raise "Refusing to unzip to existing directory: #{unzip_dir}" if File.exist?(unzip_dir)
     Dir.mkdir(dest) unless File.exist?(dest)
