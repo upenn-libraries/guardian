@@ -18,9 +18,11 @@ secrets:
 
 configs:
   known_hosts:
-    file: 'known_hosts'
+    file: known_hosts
+    name: known_hosts_v1
   ssh_config:
-    file: 'ssh_config'
+    file: ssh_config
+    name: ssh_config_v1
 
 services:
   db:
