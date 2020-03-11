@@ -2,6 +2,16 @@
 
 Guardian is a set of orchestration tools for assembling objects into Glacier-ready packages, transferring to Glacier, and recording relevant Glacier information from successful transfers in a local database.
 
+## Table of contents
+
+* [Requirements](#requirements)
+* [Supported applications](#supported-applications)
+* [Usage](#usage)
+* [Production](#production)
+* [Retrieving an archive](#retrieving-an-archive)
+* [Contributing](#contributing)
+* [License](#license)
+
 ## Requirements
 
 * Ruby 2.3.0
@@ -20,11 +30,11 @@ Guardian currently supports assembly and transfer of objects for the following a
 
 This workflow is two-fold, generating YML manifests for data to be transferred to Glacier based on a CSV manifest file.  This repo contains an [example of the template for the manifest linked here](examples/example_guardian_manifest.csv).
 
-The `guardian-make-todo` script uses the [todo_runner gem](https://github.com/upenn-libraries/todo_runner) to generate individual YML manifests, one per archive to be sent to Glacier.  The `guardian-glacier-transfer` script uses the [stronghold gem](https://github.com/upenn-libraries/stronghold) to generate each archival ZIP package and transfer to Glacier.  Glacier metadata (the archive ID and associated description) is loaded into the MySQL database for long-term storage upon each successful transfer. 
+The `guardian-make-todo` script uses the [todo_runner gem](https://github.com/upenn-libraries/todo_runner) to generate individual YML manifests, one per archive to be sent to Glacier.  The `guardian-glacier-transfer` script uses the [stronghold gem](https://github.com/upenn-libraries/stronghold) to generate each archival ZIP package and transfer to Glacier.  Glacier metadata (the archive ID and associated description) is loaded into the MySQL database for long-term storage upon each successful transfer.
 
 To generate the YAML manifests, issue the following command:
 
-```bash 
+```bash
 ruby guardian-make-todo $SOURCE_CSV $DESTINATION
 ```
 
@@ -89,14 +99,14 @@ The `guardian-glacier-transfer` script is a todo-runner that fetches, zips, and 
 
 The todo-runner tasks, in order, are:
 
-1. `:validate_todo_file` -- confirm required fields are present and verification values are valid 
+1. `:validate_todo_file` -- confirm required fields are present and verification values are valid
 2. `:fetch_source` -- retrieve the source data specified in the todo-file
 3. `:verify_fetch`(*) -- if implemented, verify fetched data's content integrity
 4. `:zip` -- package source data in single zip file; store sha-256
 5. `:verify_zip`(*) -- if implemented *and* requested, verify zipped archive content integrity
 6. `glacier` -- push to Glacier and record information in FortDB database
 
-(*) This feature implemented only for OPenn-rsync packages. 
+(*) This feature implemented only for OPenn-rsync packages.
 
 
 Sample YAML todo file:
@@ -140,16 +150,16 @@ The YAML todo file keys are:
     - used by `:fetch_source`, `:verify_fetch`, and `:verify_zip` tasks
 - `:verify_compressed_archive` -- optional; 'true' if zip file contents should be verified
     - used by `:verify_zip` task
-    
+
 #### Data validation and checksumming
 
-When each zip archive is created the `:glacier_description` value is updated 
+When each zip archive is created the `:glacier_description` value is updated
 with the SHA-256 checksum of the zipped archive. For example,
 
 ```yaml
 :archive_description: '{"owner":"demery","repository":"Walters Art Museum","openn_repo_id":"0020","description":"W681","archive_checksum":"094b114a0d79f09e6be1c4c893e4e1076d9432ff3218eac16d82fa2f6c30ecb5","archive_checksum_algorithm":"sha256"}'
 ```
-    
+
 Note that both 'archive_checksum' and 'archive_checksum_algorithm' properties have been added to the description.
 
 When the `#verify_fetch` method is implemented for a given application-method combination (e.g, openn + rsync), this method should verify the source. This may be done by using a checksum manifest, for example. The method should return `true` only upon successful validation of the source data.
@@ -162,16 +172,24 @@ The `:verify_zip` task invokes the `#verify_zip` method when `:verify_compressed
 Important: If `:verify_compressed_archive` is `true`, then `verification_destination` **must** be provided; otherwise, the todo-file will fail validation.
 
 If the `#verify_zip` method returns `true`, the `:glacier_description` value is updated noting the zip contents have been verified. In the following description, `archive_contents_verified` has the value `true`.
-                                            
+
 ```yaml
 :archive_description: '{"owner":"demery","repository":"Walters Art Museum","openn_repo_id":"0020","description":"W681","archive_checksum":"094b114a0d79f09e6be1c4c893e4e1076d9432ff3218eac16d82fa2f6c30ecb5","archive_checksum_algorithm":"sha256""archive_contents_verified":true}'
 ```
 
-NB: When an archive has been retrieved from Glacier, if the 'archive_checksum' is present **and** 'archive_contents_verified' is `true`, then the integrity of the archive content can be checked using the 'archive_checksum' and without having to verify the contents themselves. 
+NB: When an archive has been retrieved from Glacier, if the 'archive_checksum' is present **and** 'archive_contents_verified' is `true`, then the integrity of the archive content can be checked using the 'archive_checksum' and without having to verify the contents themselves.
 
 #### Log level
 
-By default log level is set to `Logger::INFO`. To control the log level set the `GUARDIAN_LOG_LEVEL` environment variable to `DEBUG`, `INFO`, `WARN`, `ERROR`, or `FATAL`. 
+By default log level is set to `Logger::INFO`. To control the log level set the `GUARDIAN_LOG_LEVEL` environment variable to `DEBUG`, `INFO`, `WARN`, `ERROR`, or `FATAL`.
+
+## Retrieving an archive
+
+A note about Penn Libraries configuration:
+
+To retrieve a Glacier archive for disaster recovery, SSH to the dedicated [Guardian database server](https://gitlab.library.upenn.edu/repo/guardian_config/blob/master/ansible/inventories/openn_production/hosts#L9) and check the database to retrieve the archive ID for the archive to be recovered.
+
+Consult the [Stronghold example usage section of its README](https://github.com/upenn-libraries/stronghold#examples) to see syntax for retrieving and downloading an archive. 
 
 ## Contributing
 
