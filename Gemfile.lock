@@ -81,7 +81,7 @@ GEM
     rubyzip (1.2.2)
     smarter_csv (1.2.6)
     thread_safe (0.3.6)
-    tzinfo (1.2.5)
+    tzinfo (1.2.10)
       thread_safe (~> 0.1)
 
 PLATFORMS
