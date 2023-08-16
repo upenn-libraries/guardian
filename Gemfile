@@ -5,8 +5,8 @@ gem 'mysql2'
 gem 'rubyzip'
 gem 'smarter_csv'
 gem 'rsync'
-gem 'stronghold', git: 'https://github.com/upenn-libraries/stronghold.git', branch: 'master'
-gem 'todo_runner', git: 'https://github.com/upenn-libraries/todo_runner.git', branch: 'master'
+gem 'stronghold', git: 'https://gitlab.library.upenn.edu/chc/openn/stronghold.git', branch: 'master'
+gem 'todo_runner', git: 'https://gitlab.library.upenn.edu/chc/todo-runner/todo_runner.git', branch: 'master'
 
 
 group :development do
