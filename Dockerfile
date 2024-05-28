@@ -18,7 +18,7 @@ WORKDIR /usr/src/app/
 
 RUN mkdir /usr/src/app/todos
 
-RUN gem install bundler
+RUN gem install bundler -v 2.4.22
 
 RUN bundle install
 
